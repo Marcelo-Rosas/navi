@@ -1,0 +1,1 @@
+UPDATE nina_settings SET evolution_api_url = 'https://icysealion-evolution.cloudfy.live' WHERE evolution_api_url LIKE '%http://%https://%' OR evolution_api_url LIKE '%https://%http://%';
