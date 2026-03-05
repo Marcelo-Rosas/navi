@@ -27,9 +27,34 @@ serve(async (req) => {
       });
     }
 
-    let baseUrl = api_url.trim().replace(/\/$/, '');
-    if (!/^https?:\/\//i.test(baseUrl)) {
-      baseUrl = `https://${baseUrl}`;
+    const normalizeEvolutionUrl = (rawUrl: string): string => {
+      let normalized = rawUrl.trim();
+
+      // Remove protocolos repetidos/malformados no início (ex: http://https//dominio)
+      const protocol = /^http:\/\/(?!https?:?\/\/)/i.test(normalized) ? 'http://' : 'https://';
+      normalized = normalized.replace(/^(?:https?:?\/\/)+/i, '');
+
+      normalized = `${protocol}${normalized}`.replace(/\/+$/, '');
+
+      const parsed = new URL(normalized);
+      if (!parsed.hostname) {
+        throw new Error('Missing hostname');
+      }
+
+      return parsed.toString().replace(/\/+$/, '');
+    };
+
+    let baseUrl: string;
+    try {
+      baseUrl = normalizeEvolutionUrl(api_url);
+    } catch {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'URL da Evolution inválida. Use algo como https://seu-dominio.com',
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // 1. Criar a instância na Evolution API
@@ -119,7 +144,7 @@ serve(async (req) => {
       .from('whatsapp_instance_secrets')
       .insert({
         instance_id: instance.id,
-        api_url,
+        api_url: baseUrl,
         api_key,
       });
 
