@@ -27,7 +27,10 @@ serve(async (req) => {
       });
     }
 
-    const baseUrl = api_url.replace(/\/$/, '');
+    let baseUrl = api_url.trim().replace(/\/$/, '');
+    if (!/^https?:\/\//i.test(baseUrl)) {
+      baseUrl = `https://${baseUrl}`;
+    }
 
     // 1. Criar a instância na Evolution API
     console.log(`[create-evolution-instance] Creating instance: ${instance_name} at ${baseUrl}`);
