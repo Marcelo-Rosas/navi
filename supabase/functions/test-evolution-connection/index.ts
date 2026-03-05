@@ -23,7 +23,10 @@ serve(async (req) => {
       });
     }
 
-    const baseUrl = api_url.replace(/\/$/, '');
+    let baseUrl = api_url.trim().replace(/\/$/, '');
+    if (!/^https?:\/\//i.test(baseUrl)) {
+      baseUrl = `https://${baseUrl}`;
+    }
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'apikey': api_key,
