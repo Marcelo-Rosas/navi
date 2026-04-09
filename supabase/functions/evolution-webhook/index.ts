@@ -1,4 +1,6 @@
+// @ts-expect-error Supabase Edge runtime resolves Deno URL imports.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// @ts-expect-error Supabase Edge runtime resolves Deno URL imports.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -47,7 +49,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // @ts-expect-error Deno global is provided in Supabase Edge runtime.
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  // @ts-expect-error Deno global is provided in Supabase Edge runtime.
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -264,6 +268,18 @@ async function processMessageUpsert(
     console.log(`[evolution-webhook] Updated conversation instance from ${conversation.instance_id} to ${instance.id}`);
   }
 
+  // Fix 2: Deduplicação de mensagens incoming — previne duplicatas em caso de retry do webhook
+  const { data: existingIncoming } = await supabase
+    .from('messages')
+    .select('id')
+    .eq('whatsapp_message_id', messageId)
+    .maybeSingle();
+
+  if (existingIncoming) {
+    console.log(`[evolution-webhook] Incoming message ${messageId} already exists — skipping duplicate webhook`);
+    return;
+  }
+
   // Extrair conteúdo da mensagem
   const { content, messageType, mediaUrl } = extractMessageContent(messageData);
 
@@ -303,7 +319,7 @@ async function processMessageUpsert(
   const { data: updatedPending, error: updateError } = await supabase
     .from('message_grouping_queue')
     .update({ process_after: processAfter })
-    .eq('phone_number_id', instance.instance_name)
+    .eq('phone_number_id', phoneNumber)
     .eq('processed', false)
     .select('id');
 
@@ -320,7 +336,7 @@ async function processMessageUpsert(
   await supabase
     .from('message_grouping_queue')
     .insert({
-      phone_number_id: instance.instance_name,
+      phone_number_id: phoneNumber,
       whatsapp_message_id: messageId,
       message_id: message.id,
       instance_id: instance.id,
