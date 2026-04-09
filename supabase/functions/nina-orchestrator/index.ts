@@ -528,6 +528,31 @@ REGRA CRÍTICA — Recuperação de contexto após instabilidade:
         while(geminiMessages.length > 0 && geminiMessages[0].role === 'model'){
           geminiMessages.shift();
         }
+
+        // Sanitização de histórico: detecta e remove mensagens de reset acidental
+        // (NAVI enviando saudação inicial mais de uma vez na mesma conversa)
+        const RESET_MARKER = 'Sou o NAVI, assistente virtual da Vectra Cargo';
+        const resetCount = geminiMessages.filter(m =>
+          m.role === 'model' &&
+          typeof (m.parts[0] as any)?.text === 'string' &&
+          (m.parts[0] as any).text.includes(RESET_MARKER)
+        ).length;
+        if (resetCount > 1) {
+          console.log(`[Nina] ${resetCount} saudações de reset detectadas no histórico (conv ${item.conversation_id}) — sanitizando contexto`);
+          const cleaned = geminiMessages.filter(m =>
+            !(m.role === 'model' &&
+              typeof (m.parts[0] as any)?.text === 'string' &&
+              (m.parts[0] as any).text.includes(RESET_MARKER))
+          );
+          // Injeta aviso de sistema para o modelo entender o que aconteceu
+          cleaned.unshift({
+            role: 'user' as const,
+            parts: [{ text: '[AVISO DO SISTEMA]: Houve uma instabilidade técnica anterior que gerou saudações iniciais duplicadas e incorretas. Essas mensagens foram removidas do histórico. O cliente já forneceu dados de cotação nesta conversa. Peça desculpas brevemente pela instabilidade, confirme que já encaminhou ao time comercial e solicite apenas o telefone de contato para retorno.' }]
+          });
+          geminiMessages.splice(0, geminiMessages.length, ...cleaned);
+          console.log(`[Nina] Histórico sanitizado: ${geminiMessages.length} msgs restantes`);
+        }
+
         console.log(`[Nina] Calling AI, msgs: ${geminiMessages.length}`);
         const MAX_TOOL_ROUNDS = 3;
         let { text, toolCalls } = await callGemini(geminiMessages, activePrompt, TOOLS);
