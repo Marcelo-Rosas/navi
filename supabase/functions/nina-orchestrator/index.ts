@@ -7,6 +7,7 @@ const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
 const cfnUrl = Deno.env.get('CFN_SUPABASE_URL');
 const cfnKey = Deno.env.get('CFN_SUPABASE_SERVICE_KEY');
 const OPERACIONAL_PHONE = '5547927010075';
+const ADMIN_PHONE = '5521975602969';
 async function buscarOS(osNumber) {
   try {
     const cfn = createClient(cfnUrl, cfnKey);
@@ -47,6 +48,206 @@ async function buscarOS(osNumber) {
     });
   }
 }
+// --- Distance estimation helpers ---
+function extractUF(location: string): string {
+  // Try explicit UF abbreviation first (e.g. "Eusébio, CE" or "SP")
+  const m = location.match(/\b([A-Z]{2})\b/);
+  if (m) return m[1];
+  const lc = location.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const cityMap: Record<string, string> = {
+    'sao paulo': 'SP', 'campinas': 'SP', 'santos': 'SP', 'sorocaba': 'SP',
+    'rio de janeiro': 'RJ', 'niteroi': 'RJ',
+    'belo horizonte': 'MG', 'uberlandia': 'MG', 'contagem': 'MG',
+    'salvador': 'BA', 'lauro de freitas': 'BA', 'camacari': 'BA', 'feira de santana': 'BA',
+    'fortaleza': 'CE', 'eusebio': 'CE', 'caucaia': 'CE', 'juazeiro do norte': 'CE',
+    'recife': 'PE', 'caruaru': 'PE', 'olinda': 'PE',
+    'natal': 'RN', 'mossoro': 'RN',
+    'joao pessoa': 'PB', 'campina grande': 'PB',
+    'teresina': 'PI', 'parnaiba': 'PI',
+    'sao luis': 'MA', 'imperatriz': 'MA',
+    'curitiba': 'PR', 'londrina': 'PR', 'maringa': 'PR',
+    'florianopolis': 'SC', 'joinville': 'SC', 'blumenau': 'SC',
+    'porto alegre': 'RS', 'caxias do sul': 'RS', 'pelotas': 'RS',
+    'goiania': 'GO', 'anapolis': 'GO',
+    'brasilia': 'DF',
+    'manaus': 'AM',
+    'belem': 'PA', 'santarem': 'PA',
+    'maceio': 'AL', 'arapiraca': 'AL',
+    'aracaju': 'SE',
+    'cuiaba': 'MT', 'rondonopolis': 'MT',
+    'campo grande': 'MS', 'dourados': 'MS',
+    'porto velho': 'RO',
+    'macapa': 'AP',
+    'boa vista': 'RR',
+    'palmas': 'TO',
+    'rio branco': 'AC',
+    'vitoria': 'ES', 'vila velha': 'ES',
+  };
+  for (const [city, uf] of Object.entries(cityMap)) {
+    if (lc.includes(city)) return uf;
+  }
+  return 'SP';
+}
+
+function estimateDistance(originUF: string, destUF: string): number {
+  if (originUF === destUF) return 350;
+  const key = (a: string, b: string) => [a, b].sort().join('-');
+  const dist: Record<string, number> = {
+    'CE-BA': 1150, 'CE-PE': 540, 'CE-RN': 290, 'CE-PB': 490, 'CE-PI': 350, 'CE-MA': 810,
+    'CE-AL': 740, 'CE-SE': 990, 'CE-GO': 2200, 'CE-DF': 2300, 'CE-SP': 2800, 'CE-RJ': 3000,
+    'CE-MG': 2600, 'CE-PR': 3100, 'CE-SC': 3400, 'CE-RS': 3800, 'CE-ES': 2700, 'CE-MS': 2500,
+    'BA-SP': 1950, 'BA-RJ': 1650, 'BA-MG': 1350, 'BA-GO': 1400, 'BA-DF': 1420,
+    'BA-SE': 350, 'BA-AL': 550, 'BA-PE': 800, 'BA-PR': 2300, 'BA-SC': 2700, 'BA-RS': 3100,
+    'BA-PI': 1000, 'BA-MA': 1300, 'BA-ES': 900, 'BA-MS': 1800,
+    'SP-RJ': 430, 'SP-MG': 580, 'SP-PR': 410, 'SP-SC': 690, 'SP-RS': 1100,
+    'SP-GO': 900, 'SP-DF': 1000, 'SP-MS': 1000, 'SP-MT': 1500, 'SP-ES': 900,
+    'RJ-MG': 440, 'RJ-PR': 850, 'RJ-SC': 1130, 'RJ-RS': 1540, 'RJ-ES': 520, 'RJ-GO': 1150,
+    'MG-GO': 740, 'MG-DF': 750, 'MG-PR': 990, 'MG-ES': 510, 'MG-MS': 1200,
+    'PR-SC': 280, 'PR-RS': 680, 'SC-RS': 380,
+    'GO-DF': 210, 'GO-MT': 900, 'GO-MS': 850, 'GO-TO': 720,
+    'PE-AL': 280, 'PE-PB': 120, 'PE-SE': 530, 'PE-RN': 290, 'PE-MA': 1200,
+    'AL-SE': 280, 'PB-RN': 180, 'MA-PI': 450, 'MA-PA': 800, 'PI-BA': 1000,
+    'PA-AM': 1300, 'PA-TO': 900, 'TO-GO': 720, 'TO-BA': 1200,
+    'MT-GO': 900, 'MT-RO': 1200, 'MT-MS': 1000, 'MS-PR': 600,
+    'ES-RJ': 520, 'ES-MG': 510, 'ES-BA': 900, 'DF-MG': 750,
+  };
+  return dist[key(originUF, destUF)] ?? 1500;
+}
+
+function addBusinessDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  let added = 0;
+  while (added < days) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) added++;
+  }
+  return d;
+}
+
+async function buscarCotacao({ origin, destination, weight_kg, cargo_value, pallet_count, pallet_l, pallet_w, pallet_h }: {
+  origin: string;
+  destination: string;
+  weight_kg: number;
+  cargo_value: number;
+  pallet_count?: number;
+  pallet_l?: number;
+  pallet_w?: number;
+  pallet_h?: number;
+}) {
+  try {
+    const cfn = createClient(cfnUrl, cfnKey);
+
+    // 1. Calcular peso taxado (cubagem 300 kg/m³)
+    let taxable_kg = weight_kg;
+    if (pallet_count && pallet_l && pallet_w && pallet_h) {
+      const cubic_kg = pallet_count * pallet_l * pallet_w * pallet_h * 300;
+      taxable_kg = Math.max(weight_kg, cubic_kg);
+    }
+
+    // 2. Estimar distância
+    const originUF = extractUF(origin);
+    const destUF = extractUF(destination);
+    const distancia_km = estimateDistance(originUF, destUF);
+
+    // 3. Buscar tabela de preços ativa
+    const { data: priceTable, error: ptError } = await cfn
+      .from('price_tables')
+      .select('id, name, modality')
+      .eq('active', true)
+      .limit(1)
+      .maybeSingle();
+    if (ptError) throw new Error(`Tabela de preços: ${ptError.message}`);
+    if (!priceTable) return JSON.stringify({ found: false, error: 'Nenhuma tabela de preços ativa. Entre em contato com o time comercial.' });
+
+    // 4. Buscar faixa de km (km_from/km_to são os nomes reais das colunas)
+    const { data: priceRow, error: prError } = await cfn
+      .from('price_table_rows')
+      .select('*')
+      .eq('price_table_id', priceTable.id)
+      .lte('km_from', distancia_km)
+      .gte('km_to', distancia_km)
+      .limit(1)
+      .maybeSingle();
+
+    let row = priceRow;
+    if (prError || !row) {
+      // Fallback: faixa mais próxima
+      const { data: nearest } = await cfn
+        .from('price_table_rows')
+        .select('*')
+        .eq('price_table_id', priceTable.id)
+        .order('km_to', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      row = nearest;
+    }
+    if (!row) return JSON.stringify({ found: false, error: 'Distância fora das faixas da tabela de preços. Entre em contato com o time comercial.' });
+
+    // 5. Buscar regras de precificação (Lucro Presumido)
+    const { data: rulesData } = await cfn
+      .from('pricing_rules_config')
+      .select('markup_percent, overhead_percent, pis_percent, cofins_percent, irpj_effective_percent, csll_effective_percent')
+      .limit(1)
+      .maybeSingle();
+    const markup_pct = Number(rulesData?.markup_percent ?? 20);
+    const overhead_pct = Number(rulesData?.overhead_percent ?? 4);
+    const pis_pct = Number(rulesData?.pis_percent ?? 0.65);
+    const cofins_pct = Number(rulesData?.cofins_percent ?? 3.0);
+    const irpj_pct = Number(rulesData?.irpj_effective_percent ?? 1.20);
+    const csll_pct = Number(rulesData?.csll_effective_percent ?? 1.08);
+
+    // 6. Calcular componentes do frete
+    const cost_per_kg = Number(row.cost_per_kg ?? 0);
+    const ad_valorem_pct = Number(row.ad_valorem_percent ?? 0);
+    const gris_pct = Number(row.gris_percent ?? 0);
+    const toll_pct = Number(row.toll_percent ?? 0);
+
+    const frete_base = taxable_kg * cost_per_kg;
+    const ad_valorem = cargo_value * (ad_valorem_pct / 100);
+    const gris = cargo_value * (gris_pct / 100);
+    const pedagio = frete_base * (toll_pct / 100);
+
+    const subtotal_custo = frete_base + ad_valorem + gris + pedagio;
+    const com_overhead = subtotal_custo * (1 + overhead_pct / 100);
+    const com_markup = com_overhead * (1 + markup_pct / 100);
+
+    // 7. Gross-up Lucro Presumido (embute PIS+COFINS+IRPJ+CSLL no preço)
+    const total_tax_rate = (pis_pct + cofins_pct + irpj_pct + csll_pct) / 100;
+    const valor_final = com_markup / (1 - total_tax_rate);
+
+    const impostos = valor_final - com_markup;
+
+    // 8. Validade: 3 dias úteis
+    const validadeDate = addBusinessDays(new Date(), 3);
+    const validadeStr = validadeDate.toLocaleDateString('pt-BR');
+
+    const r = (n: number) => Math.round(n * 100) / 100;
+
+    return JSON.stringify({
+      found: true,
+      valor_frete: r(valor_final),
+      peso_taxado_kg: Math.round(taxable_kg * 10) / 10,
+      peso_original_kg: weight_kg,
+      distancia_km_estimada: distancia_km,
+      origem_uf: originUF,
+      destino_uf: destUF,
+      tabela_usada: priceTable.name,
+      validade: validadeStr,
+      breakdown: {
+        frete_base: r(frete_base),
+        ad_valorem: r(ad_valorem),
+        gris: r(gris),
+        pedagio: r(pedagio),
+        overhead: r(com_overhead - subtotal_custo),
+        impostos_lp: r(impostos),
+      },
+      aviso: `Estimativa sujeita a confirmação do time comercial. Válida até ${validadeStr}.`,
+    });
+  } catch (err: unknown) {
+    return JSON.stringify({ found: false, error: (err as Error).message });
+  }
+}
+
 async function sugerirPerdido(supabase, minDaysStalled = 10, limit = 200, shipperIds = []) {
   try {
     const cfn = createClient(cfnUrl, cfnKey);
@@ -343,6 +544,24 @@ const TOOLS = [
           properties: {},
           required: []
         }
+      },
+      {
+        name: 'buscar_cotacao',
+        description: 'Calcula estimativa de frete com base nos dados da carga. Use quando o cliente fornecer origem, destino, peso e valor da mercadoria. Retorna valor total, peso taxado e validade.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            origin: { type: 'STRING', description: 'Cidade e UF de origem, ex: "Eusébio, CE" ou "CE"' },
+            destination: { type: 'STRING', description: 'Cidade e UF de destino, ex: "Lauro de Freitas, BA" ou "BA"' },
+            weight_kg: { type: 'NUMBER', description: 'Peso total da carga em kg' },
+            cargo_value: { type: 'NUMBER', description: 'Valor declarado da mercadoria em R$' },
+            pallet_count: { type: 'NUMBER', description: 'Número de paletes (opcional)' },
+            pallet_l: { type: 'NUMBER', description: 'Comprimento do palete em metros (opcional)' },
+            pallet_w: { type: 'NUMBER', description: 'Largura do palete em metros (opcional)' },
+            pallet_h: { type: 'NUMBER', description: 'Altura do palete em metros (opcional)' },
+          },
+          required: ['origin', 'destination', 'weight_kg', 'cargo_value']
+        }
       }
     ]
   }
@@ -492,6 +711,9 @@ Se houver ocorrências na OS, mencione e sugira falar com a equipe operacional.`
         const mandatoryToolsPrompt = `
 Regras obrigatórias de ferramentas:
 - Para consulta de OS, use buscar_status_os.
+- Para calcular frete, use buscar_cotacao assim que o cliente fornecer: origem, destino, peso (kg) e valor da mercadoria (R$). Não peça confirmação antes de chamar a tool — execute imediatamente.
+- Ao retornar resultado de buscar_cotacao: apresente o valor total em R$, peso taxado (se diferente do peso original), prazo de validade (3 dias úteis), e inclua a nota "Estimativa sujeita a confirmação do time comercial".
+- Se buscar_cotacao retornar found=false ou erro: informe que o time comercial entrará em contato com o valor em breve.
 ${isAdmin ? '- Para análise de perdidos de COT, use sugerir_perdido considerando dias desde entrada no stage negociacao.\n- Ao listar sugestões, sempre informe quote_code, shipper_name e client_name.\n- Formato obrigatório para WhatsApp (uma linha por cotação): COT-... | EMBARCADOR: ... | CLIENTE: ...\n- Para efetivar perdidos, use mover_para_perdido com quote_codes.\n- Alias explícitos de comando curto: "sugestao perdidas" => sugerir_perdido; "mover perdidas [COT-...]" => mover_para_perdido.\n- Nunca use o termo "campanha" na resposta ao usuário.\n' : '- Não use tools internas de gestão de cotações/perdidos para contatos não-admin.\n'}- Não responda que "não possui essa funcionalidade" se houver tool correspondente disponível.
 
 REGRA CRÍTICA — Recuperação de contexto após instabilidade:
@@ -616,6 +838,50 @@ REGRA CRÍTICA — Recuperação de contexto após instabilidade:
             if (tc.name === 'buscar_noticias') {
               result = await buscarNoticias(supabase);
               console.log(`[Nina] buscar_noticias: ${result.substring(0, 200)}`);
+            }
+            if (tc.name === 'buscar_cotacao') {
+              result = await buscarCotacao({
+                origin: String(args?.origin ?? ''),
+                destination: String(args?.destination ?? ''),
+                weight_kg: Number(args?.weight_kg ?? 0),
+                cargo_value: Number(args?.cargo_value ?? 0),
+                pallet_count: args?.pallet_count ? Number(args.pallet_count) : undefined,
+                pallet_l: args?.pallet_l ? Number(args.pallet_l) : undefined,
+                pallet_w: args?.pallet_w ? Number(args.pallet_w) : undefined,
+                pallet_h: args?.pallet_h ? Number(args.pallet_h) : undefined,
+              });
+              console.log(`[Nina] buscar_cotacao(${args?.origin}→${args?.destination}): ${result.substring(0, 200)}`);
+
+              // Se a cotação falhou, notifica admin automaticamente com todos os dados
+              try {
+                const parsed = JSON.parse(result);
+                if (!parsed.found) {
+                  const { data: contactInfo } = await supabase
+                    .from('contacts')
+                    .select('name, phone_number')
+                    .eq('id', item.contact_id)
+                    .maybeSingle();
+                  const alertMsg =
+                    `🚨 *Falha na Cotação Automática — NAVI*\n\n` +
+                    `Cliente: *${contactInfo?.name ?? 'Desconhecido'}* (${contactInfo?.phone_number})\n\n` +
+                    `Dados da carga:\n` +
+                    `• Origem: ${args?.origin ?? '-'}\n` +
+                    `• Destino: ${args?.destination ?? '-'}\n` +
+                    `• Peso: ${args?.weight_kg ?? '-'} kg\n` +
+                    `• Valor mercadoria: R$ ${args?.cargo_value ?? '-'}\n\n` +
+                    `Erro retornado: _${parsed.error ?? 'desconhecido'}_\n\n` +
+                    `⚡ Ação necessária: verificar tabela de preços no CFN (projeto epgedaiukjippepujuzc) e retornar a cotação ao cliente via WhatsApp.`;
+
+                  await supabase.from('send_queue').insert({
+                    conversation_id: item.conversation_id,
+                    contact_id: item.contact_id,
+                    content: `__NOTIFY__${ADMIN_PHONE}__${alertMsg}`,
+                    scheduled_at: new Date(Date.now() + 2000).toISOString(),
+                    status: 'pending',
+                  });
+                  console.log(`[Nina] buscar_cotacao falhou — admin ${ADMIN_PHONE} notificado`);
+                }
+              } catch (_) { /* ignore parse error */ }
             }
             toolResults.push({
               functionResponse: {
