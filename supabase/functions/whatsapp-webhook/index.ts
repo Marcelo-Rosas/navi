@@ -39,15 +39,57 @@ function extractInboundText(message: Record<string, unknown>): string | null {
       type?: string;
       button_reply?: { title?: string };
       list_reply?: { title?: string };
+      nfm_reply?: { name?: string; body?: string; response_json?: string };
     } | undefined;
     if (ir?.type === "button_reply") return ir.button_reply?.title?.trim() || null;
     if (ir?.type === "list_reply") return ir.list_reply?.title?.trim() || null;
+    if (ir?.type === "nfm_reply") return formatNfmReply(ir.nfm_reply);
   }
   if (type === "button") {
     const t = (message.button as { text?: string } | undefined)?.text;
     return t?.trim() ? t : null;
   }
   return null;
+}
+
+/**
+ * Meta Flow submission — converte response_json em texto estruturado que o
+ * nina-orchestrator (LLM via Groq) reconhece e dispara buscar_cotacao
+ * imediatamente sem precisar perguntar nada ao cliente.
+ *
+ * Schema do Flow QUOTATION_FORM (4 campos): origem, destino, peso_kg, cargo_value.
+ */
+function formatNfmReply(
+  nfm?: { name?: string; body?: string; response_json?: string },
+): string | null {
+  if (!nfm?.response_json) return null;
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(nfm.response_json) as Record<string, unknown>;
+  } catch {
+    console.warn("[whatsapp-webhook] nfm_reply: response_json inválido");
+    return null;
+  }
+
+  // Cotação flow — campos esperados
+  const origem = String(data.origem ?? "").trim();
+  const destino = String(data.destino ?? "").trim();
+  const peso = String(data.peso_kg ?? "").trim();
+  const valor = String(data.cargo_value ?? "").trim();
+
+  if (origem && destino && peso && valor) {
+    return [
+      "[FORM_COTACAO]",
+      `Origem: ${origem}`,
+      `Destino: ${destino}`,
+      `Peso: ${peso} kg`,
+      `Valor da mercadoria: R$ ${valor}`,
+    ].join("\n");
+  }
+
+  // Form desconhecido — devolve raw pra LLM tentar interpretar
+  const pairs = Object.entries(data).map(([k, v]) => `${k}: ${String(v)}`);
+  return `[FORM_RECEBIDO]\n${pairs.join("\n")}`;
 }
 
 function contactNameForWa(

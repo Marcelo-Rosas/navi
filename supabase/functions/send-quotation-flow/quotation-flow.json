@@ -1,0 +1,69 @@
+{
+  "version": "5.0",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "QUOTATION_FORM": []
+  },
+  "screens": [
+    {
+      "id": "QUOTATION_FORM",
+      "title": "Solicitar Cotação",
+      "terminal": true,
+      "data": {},
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextSubheading",
+            "text": "Preencha pra receber a estimativa de frete"
+          },
+          {
+            "type": "TextInput",
+            "name": "origem",
+            "label": "Origem (Cidade, UF)",
+            "input-type": "text",
+            "required": true,
+            "helper-text": "Ex: Eusébio, CE"
+          },
+          {
+            "type": "TextInput",
+            "name": "destino",
+            "label": "Destino (Cidade, UF)",
+            "input-type": "text",
+            "required": true,
+            "helper-text": "Ex: Lauro de Freitas, BA"
+          },
+          {
+            "type": "TextInput",
+            "name": "peso_kg",
+            "label": "Peso total (kg)",
+            "input-type": "number",
+            "required": true,
+            "helper-text": "Peso bruto da carga"
+          },
+          {
+            "type": "TextInput",
+            "name": "cargo_value",
+            "label": "Valor da mercadoria (R$)",
+            "input-type": "number",
+            "required": true,
+            "helper-text": "Valor declarado para nota fiscal"
+          },
+          {
+            "type": "Footer",
+            "label": "Solicitar cotação",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "origem": "${form.origem}",
+                "destino": "${form.destino}",
+                "peso_kg": "${form.peso_kg}",
+                "cargo_value": "${form.cargo_value}"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

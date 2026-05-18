@@ -149,11 +149,13 @@ async function buscarCotacao({ origin, destination, weight_kg, cargo_value, pall
     const destUF = extractUF(destination);
     const distancia_km = estimateDistance(originUF, destUF);
 
-    // 3. Buscar tabela de preços ativa
+    // 3. Determinar modalidade e buscar tabela de preços ativa
+    const modality = taxable_kg < 1000 ? 'fracionado' : 'lotacao';
     const { data: priceTable, error: ptError } = await cfn
       .from('price_tables')
       .select('id, name, modality')
       .eq('active', true)
+      .eq('modality', modality)
       .limit(1)
       .maybeSingle();
     if (ptError) throw new Error(`Tabela de preços: ${ptError.message}`);
@@ -183,39 +185,92 @@ async function buscarCotacao({ origin, destination, weight_kg, cargo_value, pall
     }
     if (!row) return JSON.stringify({ found: false, error: 'Distância fora das faixas da tabela de preços. Entre em contato com o time comercial.' });
 
-    // 5. Buscar regras de precificação (Lucro Presumido)
-    const { data: rulesData } = await cfn
+    // 5. Buscar regras de precificação (tabela key-value)
+    const { data: rulesRows } = await cfn
       .from('pricing_rules_config')
-      .select('markup_percent, overhead_percent, pis_percent, cofins_percent, irpj_effective_percent, csll_effective_percent')
-      .limit(1)
-      .maybeSingle();
-    const markup_pct = Number(rulesData?.markup_percent ?? 20);
-    const overhead_pct = Number(rulesData?.overhead_percent ?? 4);
-    const pis_pct = Number(rulesData?.pis_percent ?? 0.65);
-    const cofins_pct = Number(rulesData?.cofins_percent ?? 3.0);
-    const irpj_pct = Number(rulesData?.irpj_effective_percent ?? 1.20);
-    const csll_pct = Number(rulesData?.csll_effective_percent ?? 1.08);
+      .select('key, value')
+      .eq('is_active', true);
+    const rule = (key: string, def: number) => {
+      const found = rulesRows?.find((r: { key: string; value: string }) => r.key === key);
+      return Number(found?.value ?? def);
+    };
+    const overhead_pct  = rule('overhead_percent', 4);
+    const profit_pct    = rule('profit_margin_percent', 15);
+    const pis_pct       = rule('pis_percent', 0.65);
+    const cofins_pct    = rule('cofins_percent', 3.0);
+    const irpj_pct      = rule('irpj_effective_percent', 1.20);
+    const csll_pct      = rule('csll_effective_percent', 1.08);
+    const adv_lot_pct   = rule('ad_valorem_lotacao_percent', 0.03);
+
+    // ICMS: Vectra emite CT-e de SC. Alíquota interestadual SC→Sul/Sudeste=12%, SC→demais=7%
+    const SUL_SUDESTE = ['SP','RJ','MG','ES','PR','RS','SC'];
+    const icms_pct = SUL_SUDESTE.includes(destUF) ? rule('icms_default', 12) : rule('icms_interestadual_norte_nordeste_co', 7);
+
+    // Pedágio fallback por faixa de km
+    const pedagio = (() => {
+      if (distancia_km <= 500)  return rule('pedagio_fallback_ate_500km', 280);
+      if (distancia_km <= 800)  return rule('pedagio_fallback_501_800km', 420);
+      if (distancia_km <= 1200) return rule('pedagio_fallback_801_1200km', 620);
+      if (distancia_km <= 1800) return rule('pedagio_fallback_1201_1800km', 920);
+      if (distancia_km <= 2500) return rule('pedagio_fallback_1801_2500km', 1300);
+      return rule('pedagio_fallback_acima_2500km', 1800);
+    })();
 
     // 6. Calcular componentes do frete
-    const cost_per_kg = Number(row.cost_per_kg ?? 0);
-    const ad_valorem_pct = Number(row.ad_valorem_percent ?? 0);
-    const gris_pct = Number(row.gris_percent ?? 0);
-    const toll_pct = Number(row.toll_percent ?? 0);
+    const rate_per_kg = modality === 'lotacao'
+      ? Number(row.cost_per_ton ?? 0) / 1000
+      : Number(row.weight_rate_above_200 ?? 0);
 
-    const frete_base = taxable_kg * cost_per_kg;
-    const ad_valorem = cargo_value * (ad_valorem_pct / 100);
-    const gris = cargo_value * (gris_pct / 100);
-    const pedagio = frete_base * (toll_pct / 100);
+    const frete_ntc = taxable_kg * rate_per_kg;
 
-    const subtotal_custo = frete_base + ad_valorem + gris + pedagio;
-    const com_overhead = subtotal_custo * (1 + overhead_pct / 100);
-    const com_markup = com_overhead * (1 + markup_pct / 100);
+    // ANTT floor: auto-seleciona veículo por peso taxado (Tabela A, carga_geral)
+    const axes_count = taxable_kg <= 3500 ? 2
+      : taxable_kg <= 6000  ? 2
+      : taxable_kg <= 14000 ? 3
+      : taxable_kg <= 18000 ? 4
+      : taxable_kg <= 25000 ? 5
+      : taxable_kg <= 30000 ? 6
+      : 9;
+    const { data: anttRow } = await cfn
+      .from('antt_floor_rates')
+      .select('ccd, cc')
+      .eq('operation_table', 'A')
+      .eq('cargo_type', 'carga_geral')
+      .eq('axes_count', axes_count)
+      .is('valid_until', null)
+      .maybeSingle();
+    const antt_floor = anttRow
+      ? distancia_km * Number(anttRow.ccd) + Number(anttRow.cc)
+      : 0;
 
-    // 7. Gross-up Lucro Presumido (embute PIS+COFINS+IRPJ+CSLL no preço)
-    const total_tax_rate = (pis_pct + cofins_pct + irpj_pct + csll_pct) / 100;
-    const valor_final = com_markup / (1 - total_tax_rate);
+    // Over por faixa de distância (lotação)
+    const over_pct = distancia_km <= 800  ? rule('over_lotacao_ate_800km', 60)
+      : distancia_km <= 1500 ? rule('over_lotacao_801_1500km', 45)
+      : distancia_km <= 2500 ? rule('over_lotacao_1501_2500km', 30)
+      : rule('over_lotacao_acima_2500km', 20);
 
-    const impostos = valor_final - com_markup;
+    // lotacao_calc_mode=1 → ANTT×(1+over) como base; =0 → max(NTC, ANTT)
+    const calc_mode = rule('lotacao_calc_mode', 1);
+    const custo_motorista = modality !== 'lotacao'
+      ? frete_ntc
+      : calc_mode === 1
+        ? antt_floor * (1 + over_pct / 100)
+        : Math.max(frete_ntc, antt_floor);
+
+    // Lotação: GRIS e TSO zerados; fracionado: aplica sobre cargo_value
+    const ad_valorem = modality === 'lotacao'
+      ? cargo_value * (adv_lot_pct / 100)
+      : cargo_value * (Number(row.cost_value_percent ?? 0) / 100);
+    const gris = modality === 'lotacao' ? 0 : cargo_value * (Number(row.gris_percent ?? 0) / 100);
+    const tso  = modality === 'lotacao' ? 0 : cargo_value * (Number(row.tso_percent  ?? 0) / 100);
+
+    const custos_diretos = custo_motorista + pedagio + ad_valorem + gris + tso;
+
+    // 7. Gross-up único (Lucro Presumido): divisor inclui overhead + lucro + impostos + ICMS
+    const taxa = (overhead_pct + profit_pct + pis_pct + cofins_pct + irpj_pct + csll_pct + icms_pct) / 100;
+    const valor_final = custos_diretos / (1 - taxa);
+
+    const impostos = valor_final - custos_diretos;
 
     // 8. Validade: 3 dias úteis
     const validadeDate = addBusinessDays(new Date(), 3);
@@ -234,17 +289,67 @@ async function buscarCotacao({ origin, destination, weight_kg, cargo_value, pall
       tabela_usada: priceTable.name,
       validade: validadeStr,
       breakdown: {
-        frete_base: r(frete_base),
+        custo_motorista: r(custo_motorista),
+        antt_floor: r(antt_floor),
+        over_antt_pct: over_pct,
+        pedagio: r(pedagio),
         ad_valorem: r(ad_valorem),
         gris: r(gris),
-        pedagio: r(pedagio),
-        overhead: r(com_overhead - subtotal_custo),
-        impostos_lp: r(impostos),
+        tso: r(tso),
+        custos_diretos: r(custos_diretos),
+        taxa_gross_up_pct: r(taxa * 100),
+        impostos_e_margem: r(impostos),
       },
       aviso: `Estimativa sujeita a confirmação do time comercial. Válida até ${validadeStr}.`,
     });
   } catch (err: unknown) {
     return JSON.stringify({ found: false, error: (err as Error).message });
+  }
+}
+
+/**
+ * iniciar_form_cotacao — dispara Meta Flow QUOTATION_FORM pro cliente preencher
+ * origem/destino/peso/valor de forma estruturada (P0-6 do board Miro).
+ *
+ * Use quando o cliente expressa intenção de cotação mas NÃO forneceu os 4 dados
+ * (origem, destino, peso, valor). Quando tiver os 4, chame buscar_cotacao direto.
+ *
+ * Quando o cliente submete o Flow, vem como interactive.nfm_reply no webhook —
+ * extractInboundText devolve "[FORM_COTACAO]\nOrigem: ...\n..." e o LLM vê isso
+ * no próximo turn e chama buscar_cotacao automaticamente.
+ */
+async function iniciarFormCotacao(
+  supabase: ReturnType<typeof createClient>,
+  phone: string,
+  contactName: string | null,
+): Promise<string> {
+  if (!phone) {
+    return JSON.stringify({ sent: false, error: "phone_missing" });
+  }
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/send-quotation-flow`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${supabaseServiceKey}`,
+      },
+      body: JSON.stringify({ phone, contact_name: contactName ?? undefined }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      console.warn("[Nina] iniciarFormCotacao falhou:", data);
+      return JSON.stringify({ sent: false, error: data?.error || `http_${res.status}` });
+    }
+    return JSON.stringify({
+      sent: true,
+      message_id: data.message_id,
+      flow_token: data.flow_token,
+      hint: "Form enviado. Aguarde o cliente submeter — vai retornar como [FORM_COTACAO] no próximo turn.",
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Nina] iniciarFormCotacao exception:", msg);
+    return JSON.stringify({ sent: false, error: msg });
   }
 }
 
@@ -562,6 +667,15 @@ const TOOLS = [
           },
           required: ['origin', 'destination', 'weight_kg', 'cargo_value']
         }
+      },
+      {
+        name: 'iniciar_form_cotacao',
+        description: 'Envia um formulário Meta Flow estruturado para o cliente preencher os 4 dados de cotação (origem, destino, peso, valor). Use APENAS quando o cliente expressar intenção de cotação mas faltar 2 ou mais dados — assim ele preenche tudo de uma vez. Se ele já forneceu os 4 dados em texto livre, use buscar_cotacao diretamente. Após enviar o form, NÃO responda mais nada nesse turn — aguarde a submissão do cliente.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {},
+          required: []
+        }
       }
     ]
   }
@@ -703,10 +817,26 @@ Para análise de perdidos de COT, use sugerir_perdido para sugerir cards em nego
 Para efetivar perda, use mover_para_perdido com quote_codes.
 Ao apresentar sugestões de perdidos, sempre mostrar quote_code, shipper_name e client_name.
 NUNCA use o termo "campanha" na resposta; use "cotação" ou "card".`;
-        const basePrompt = isAdmin ? adminPrompt : settings?.system_prompt_override ?? `Você é Navi, assistente virtual da Vectra Cargo. Seja simpática, profissional e objetiva. Responda sempre em português.
+        // Interpolação de variáveis de template no system_prompt_override
+        const rawPrompt = settings?.system_prompt_override ?? `Você é Navi, assistente virtual da Vectra Cargo. Seja simpática, profissional e objetiva. Responda sempre em português.
 Quando o cliente informar um número de OS, use a tool buscar_status_os para consultar o sistema em tempo real.
 Se a OS não for encontrada, informe educadamente e diga que a equipe vai verificar.
 Se houver ocorrências na OS, mencione e sugira falar com a equipe operacional.`;
+        const now = new Date();
+        const brFormatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const brParts = brFormatter.formatToParts(now);
+        const get = (type: string) => brParts.find(p => p.type === type)?.value ?? '';
+        const brDate = `${get('day')}/${get('month')}/${get('year')}`;
+        const brTime = `${get('hour')}:${get('minute')}`;
+        const brWeekday = get('weekday');
+        const interpolatedPrompt = rawPrompt
+          .replace(/\{\{\s*cliente_nome\s*\}\}/g, contact?.name ?? 'cliente')
+          .replace(/\{\{\s*cliente_telefone\s*\}\}/g, contact?.phone_number ?? '')
+          .replace(/\{\{\s*data_hora\s*\}\}/g, `${brDate} ${brTime}`)
+          .replace(/\{\{\s*data\s*\}\}/g, brDate)
+          .replace(/\{\{\s*hora\s*\}\}/g, brTime)
+          .replace(/\{\{\s*dia_semana\s*\}\}/g, brWeekday);
+        const basePrompt = isAdmin ? adminPrompt : interpolatedPrompt;
         // Mantém regras de tool calling sempre ativas, mesmo com system_prompt_override no banco.
         const mandatoryToolsPrompt = `
 Regras obrigatórias de ferramentas:
@@ -714,6 +844,8 @@ Regras obrigatórias de ferramentas:
 - Para calcular frete, use buscar_cotacao assim que o cliente fornecer: origem, destino, peso (kg) e valor da mercadoria (R$). Não peça confirmação antes de chamar a tool — execute imediatamente.
 - Ao retornar resultado de buscar_cotacao: apresente o valor total em R$, peso taxado (se diferente do peso original), prazo de validade (3 dias úteis), e inclua a nota "Estimativa sujeita a confirmação do time comercial".
 - Se buscar_cotacao retornar found=false ou erro: informe que o time comercial entrará em contato com o valor em breve.
+- Se o cliente pedir cotação mas ainda NÃO informou origem, destino, peso E valor — em vez de perguntar campo por campo em texto, use iniciar_form_cotacao para enviar um formulário Meta Flow estruturado. NÃO escreva nada nesse turn depois de chamar a tool — aguarde o cliente preencher.
+- Mensagens iniciadas com "[FORM_COTACAO]" são submissões do Meta Flow — extraia origem/destino/peso/valor delas e chame buscar_cotacao imediatamente, sem reperguntar nada.
 ${isAdmin ? '- Para análise de perdidos de COT, use sugerir_perdido considerando dias desde entrada no stage negociacao.\n- Ao listar sugestões, sempre informe quote_code, shipper_name e client_name.\n- Formato obrigatório para WhatsApp (uma linha por cotação): COT-... | EMBARCADOR: ... | CLIENTE: ...\n- Para efetivar perdidos, use mover_para_perdido com quote_codes.\n- Alias explícitos de comando curto: "sugestao perdidas" => sugerir_perdido; "mover perdidas [COT-...]" => mover_para_perdido.\n- Nunca use o termo "campanha" na resposta ao usuário.\n' : '- Não use tools internas de gestão de cotações/perdidos para contatos não-admin.\n'}- Não responda que "não possui essa funcionalidade" se houver tool correspondente disponível.
 
 REGRA CRÍTICA — Recuperação de contexto após instabilidade:
@@ -778,7 +910,7 @@ REGRA CRÍTICA — Recuperação de contexto após instabilidade:
         console.log(`[Nina] Calling AI, msgs: ${geminiMessages.length}`);
         const MAX_TOOL_ROUNDS = 3;
         let { text, toolCalls } = await callGemini(geminiMessages, activePrompt, TOOLS);
-        const wantsLostSuggestion = /perdid|follow-?up|follow up|cot|cota[cç][aã]o/i.test(messageContent);
+        const wantsLostSuggestion = /perdid|follow-?up|follow up|COT-\d/i.test(messageContent);
         if (toolCalls.length === 0 && isAdmin && wantsLostSuggestion) {
           toolCalls = [
             {
@@ -839,6 +971,19 @@ REGRA CRÍTICA — Recuperação de contexto após instabilidade:
               result = await buscarNoticias(supabase);
               console.log(`[Nina] buscar_noticias: ${result.substring(0, 200)}`);
             }
+            if (tc.name === 'iniciar_form_cotacao') {
+              const { data: contactInfo } = await supabase
+                .from('contacts')
+                .select('name, phone_number')
+                .eq('id', item.contact_id)
+                .maybeSingle();
+              result = await iniciarFormCotacao(
+                supabase,
+                String(contactInfo?.phone_number ?? ''),
+                (contactInfo?.name as string | null) ?? null,
+              );
+              console.log(`[Nina] iniciar_form_cotacao(${contactInfo?.phone_number}): ${result.substring(0, 200)}`);
+            }
             if (tc.name === 'buscar_cotacao') {
               result = await buscarCotacao({
                 origin: String(args?.origin ?? ''),
@@ -875,7 +1020,8 @@ REGRA CRÍTICA — Recuperação de contexto após instabilidade:
                   await supabase.from('send_queue').insert({
                     conversation_id: item.conversation_id,
                     contact_id: item.contact_id,
-                    content: `__NOTIFY__${ADMIN_PHONE}__${alertMsg}`,
+                    content: alertMsg,
+                    override_phone: ADMIN_PHONE,
                     scheduled_at: new Date(Date.now() + 2000).toISOString(),
                     status: 'pending',
                   });
@@ -909,6 +1055,12 @@ REGRA CRÍTICA — Recuperação de contexto após instabilidade:
         }
         if (!text) throw new Error('Empty response from Gemini');
         console.log(`[Nina] Response (${text.length} chars): ${text.substring(0, 100)}`);
+        // Cancela respostas pendentes anteriores para esta conversa (evita duplicatas)
+        await supabase.from('send_queue')
+          .update({ status: 'failed', error_message: 'superseded_by_new_response' })
+          .eq('conversation_id', item.conversation_id)
+          .eq('status', 'pending')
+          .is('override_phone', null); // preserva notificações internas (admin/operacional)
         // Insere na send_queue com scheduled_at = agora
         await supabase.from('send_queue').insert({
           conversation_id: item.conversation_id,
@@ -931,7 +1083,8 @@ REGRA CRÍTICA — Recuperação de contexto após instabilidade:
           await supabase.from('send_queue').insert({
             conversation_id: item.conversation_id,
             contact_id: item.contact_id,
-            content: `__NOTIFY__${OPERACIONAL_PHONE}__${alertMsg}`,
+            content: alertMsg,
+            override_phone: OPERACIONAL_PHONE,
             scheduled_at: new Date(Date.now() + 3000).toISOString(),
             status: 'pending'
           });
