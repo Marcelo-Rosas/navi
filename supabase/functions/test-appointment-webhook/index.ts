@@ -1,12 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAISimple } from "../nina-orchestrator/_shared/ai.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
-
-const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 // Helper function to format phone number to +55 (XX) XXXXX-XXXX format
 function formatPhoneNumber(phone: string): string {
@@ -48,10 +47,10 @@ function formatTimeDisplay(timeStr: string): string {
   return timeStr.substring(0, 5);
 }
 
-// Generate conversation summary using Lovable AI
+// Generate conversation summary using Gemini
 async function generateConversationSummary(
   messages: { content: string | null; from_type: string }[],
-  lovableApiKey: string
+  geminiApiKey: string
 ): Promise<string> {
   if (!messages || messages.length === 0) {
     return 'Sem histórico de conversa disponível.';
@@ -68,32 +67,16 @@ async function generateConversationSummary(
   }
 
   try {
-    const response = await fetch(LOVABLE_AI_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { 
-            role: 'system', 
-            content: 'Você é um assistente que gera resumos breves de conversas de vendas. Gere um resumo de no máximo 3 frases, focando no interesse do lead, o produto/serviço discutido e o motivo da reunião. Seja direto e objetivo.' 
-          },
-          { role: 'user', content: `Resuma esta conversa:\n\n${conversationText}` }
-        ],
-        max_tokens: 200
-      })
-    });
-
-    if (!response.ok) {
-      console.error('[Test Webhook] AI summary error:', response.status);
-      return 'Não foi possível gerar resumo da conversa.';
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || 'Não foi possível gerar resumo da conversa.';
+    const prompt = [
+      'Você é um assistente que gera resumos breves de conversas de vendas.',
+      'Gere um resumo de no máximo 3 frases, focando no interesse do lead, no produto/serviço discutido e no motivo da reunião.',
+      'Seja direto e objetivo.',
+      '',
+      'Conversa:',
+      conversationText,
+    ].join('\n');
+    const summary = await callAISimple(geminiApiKey, prompt, 220);
+    return summary || 'Não foi possível gerar resumo da conversa.';
   } catch (error) {
     console.error('[Test Webhook] Error generating summary:', error);
     return 'Erro ao gerar resumo da conversa.';
@@ -193,7 +176,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Fetch appointment with contact data
@@ -331,7 +314,7 @@ serve(async (req) => {
           .limit(20);
 
         // Generate summary
-        const summary = await generateConversationSummary(messages || [], lovableApiKey);
+        const summary = await generateConversationSummary(messages || [], geminiApiKey);
         console.log('[Test Webhook] Generated summary:', summary);
 
         // Send notification to closer

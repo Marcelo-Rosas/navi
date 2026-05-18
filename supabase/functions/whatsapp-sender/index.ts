@@ -1,516 +1,245 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-};
-
-const WHATSAPP_API_URL = "https://graph.facebook.com/v18.0";
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
   try {
-    console.log('[Sender] Starting send process...');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const now = new Date().toISOString();
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
-    const MAX_EXECUTION_TIME = 25000; // 25 seconds
-    const startTime = Date.now();
-    let totalSent = 0;
-    let iterations = 0;
-
-    console.log('[Sender] Starting polling loop');
-
-    // Cache de settings por user_id para evitar múltiplas queries
-    const settingsCache: Record<string, any> = {};
-    // Cache de instance secrets
-    const instanceSecretsCache: Record<string, any> = {};
-
-    while (Date.now() - startTime < MAX_EXECUTION_TIME) {
-      iterations++;
-      console.log(`[Sender] Iteration ${iterations}, elapsed: ${Date.now() - startTime}ms`);
-
-      // Claim batch of messages to send
-      const { data: queueItems, error: claimError } = await supabase
-        .rpc('claim_send_queue_batch', { p_limit: 10 });
-
-      if (claimError) {
-        console.error('[Sender] Error claiming batch:', claimError);
-        throw claimError;
-      }
-
-      if (!queueItems || queueItems.length === 0) {
-        console.log('[Sender] No messages ready to send, checking for scheduled messages...');
-        
-        // Check for messages scheduled in the next 5 seconds
-        const { data: upcoming, error: upcomingError } = await supabase
-          .from('send_queue')
-          .select('id, scheduled_at')
-          .eq('status', 'pending')
-          .gte('scheduled_at', new Date().toISOString())
-          .lte('scheduled_at', new Date(Date.now() + 5000).toISOString())
-          .order('scheduled_at', { ascending: true })
-          .limit(1);
-
-        if (upcomingError) {
-          console.error('[Sender] Error checking upcoming messages:', upcomingError);
-        }
-
-        if (upcoming && upcoming.length > 0) {
-          const scheduledAt = new Date(upcoming[0].scheduled_at).getTime();
-          const now = Date.now();
-          const waitTime = Math.min(
-            Math.max(scheduledAt - now + 100, 0),
-            5000
-          );
-          
-          if (waitTime > 0 && (Date.now() - startTime + waitTime) < MAX_EXECUTION_TIME) {
-            console.log(`[Sender] Waiting ${waitTime}ms for scheduled message at ${upcoming[0].scheduled_at}`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-            continue;
-          }
-        }
-        
-        // No more messages to process
-        console.log('[Sender] No more messages to process, exiting loop');
-        break;
-      }
-
-      console.log(`[Sender] Processing batch of ${queueItems.length} messages`);
-
-      for (const item of queueItems) {
-        try {
-          // Verificar se tem instance_id (Evolution API) ou usar nina_settings (API Oficial)
-          if (item.instance_id) {
-            await sendViaEvolution(supabase, item, instanceSecretsCache);
-          } else {
-            await sendViaOfficial(supabase, item, settingsCache);
-          }
-          
-          // Mark as completed
-          await supabase
-            .from('send_queue')
-            .update({ 
-              status: 'completed', 
-              sent_at: new Date().toISOString() 
-            })
-            .eq('id', item.id);
-          
-          totalSent++;
-          console.log(`[Sender] Successfully sent message ${item.id} (${totalSent} total)`);
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          console.error(`[Sender] Error sending item ${item.id}:`, error);
-          
-          // Mark as failed with retry
-          const newRetryCount = (item.retry_count || 0) + 1;
-          const shouldRetry = newRetryCount < 3;
-          
-          await supabase
-            .from('send_queue')
-            .update({ 
-              status: shouldRetry ? 'pending' : 'failed',
-              retry_count: newRetryCount,
-              error_message: errorMessage,
-              scheduled_at: shouldRetry 
-                ? new Date(Date.now() + newRetryCount * 60000).toISOString() 
-                : null
-            })
-            .eq('id', item.id);
-        }
-      }
+    // Processing há >1h: abandonar (zumbis bloqueavam a fila ao voltarem pending com scheduled_at antigo).
+    const { data: abandoned } = await supabase
+      .from('send_queue')
+      .update({
+        status: 'failed',
+        error_message: 'processing_timeout_abandoned',
+      })
+      .eq('status', 'processing')
+      .lt('updated_at', oneHourAgo)
+      .select('id');
+    if (abandoned && abandoned.length > 0) {
+      console.log(`[Sender] Abandoned ${abandoned.length} stale processing row(s)`);
     }
 
-    const executionTime = Date.now() - startTime;
-    console.log(`[Sender] Completed: sent ${totalSent} messages in ${iterations} iterations (${executionTime}ms)`);
+    // Processing entre 5min e 1h: re-tentar como pending
+    const { data: stuck } = await supabase
+      .from('send_queue')
+      .update({ status: 'pending' })
+      .eq('status', 'processing')
+      .lt('updated_at', fiveMinAgo)
+      .gte('updated_at', oneHourAgo)
+      .select('id');
+    if (stuck && stuck.length > 0) {
+      console.log(`[Sender] Recovered ${stuck.length} stuck message(s) to pending`);
+    }
 
-    return new Response(JSON.stringify({ 
-      sent: totalSent, 
-      iterations,
-      executionTime 
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    // Não filtrar por created_at recente: pendentes antigas também precisam ser enviadas
+    // (filtro de 30min deixava milhares de rows em pending para sempre).
+    const { data: queueItems, error } = await supabase
+      .from('send_queue')
+      .select('*')
+      .eq('status', 'pending')
+      .lte('scheduled_at', now)
+      .order('scheduled_at', { ascending: true })
+      .limit(5);
 
-  } catch (error) {
-    console.error('[Sender] Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
-});
+    if (error) {
+      console.error('[Sender] Error:', error);
+      return new Response(JSON.stringify({ error }), { status: 500 });
+    }
 
-// ========================================
-// EVOLUTION API SENDER
-// ========================================
-async function sendViaEvolution(supabase: any, queueItem: any, secretsCache: Record<string, any>) {
-  console.log(`[Sender] Sending via Evolution API: ${queueItem.id}`);
+    if (!queueItems || queueItems.length === 0) {
+      console.log('[Sender] No messages to send');
+      return new Response(JSON.stringify({ sent: 0 }), { status: 200 });
+    }
 
-  // Buscar instância
-  const { data: instance, error: instanceError } = await supabase
-    .from('whatsapp_instances')
-    .select('id, instance_name, instance_id_external, provider_type, status')
-    .eq('id', queueItem.instance_id)
-    .single();
+    console.log(`[Sender] Processing ${queueItems.length} message(s)`);
 
-  if (instanceError || !instance) {
-    throw new Error(`Instance not found: ${queueItem.instance_id}`);
-  }
-
-  if (instance.status !== 'connected') {
-    throw new Error(`Instance ${instance.instance_name} is not connected (status: ${instance.status})`);
-  }
-
-  // Buscar secrets (com cache)
-  let secrets = secretsCache[instance.id];
-  if (!secrets) {
-    const { data: secretsData, error: secretsError } = await supabase
-      .from('whatsapp_instance_secrets')
-      .select('api_url, api_key')
-      .eq('instance_id', instance.id)
+    const { data: settings } = await supabase
+      .from('nina_settings')
+      .select('whatsapp_phone_number_id, whatsapp_access_token')
       .single();
 
-    if (secretsError || !secretsData) {
-      throw new Error('Instance secrets not found');
-    }
-    secrets = secretsData;
-    secretsCache[instance.id] = secrets;
-  }
+    const phoneNumberId = settings?.whatsapp_phone_number_id;
+    const accessToken = settings?.whatsapp_access_token;
 
-  // Buscar contato
-  const { data: contact } = await supabase
-    .from('contacts')
-    .select('phone_number, whatsapp_id')
-    .eq('id', queueItem.contact_id)
-    .maybeSingle();
-
-  if (!contact) {
-    throw new Error('Contact not found');
-  }
-
-  // Detectar se é número @lid (usar identificador completo) ou normal (só dígitos)
-  const whatsappId = contact.whatsapp_id || contact.phone_number;
-  const isLid = whatsappId.includes('@lid');
-  // CORREÇÃO: Para @lid, manter o identificador COMPLETO (ex: "71721742807043@lid")
-  // A Evolution API precisa do sufixo @lid para entregar corretamente
-  const targetNumber = isLid 
-    ? whatsappId  // Manter completo: "71721742807043@lid"
-    : whatsappId.replace(/\D/g, ''); // Extrair só números para formato normal
-
-  console.log(`[Sender] Contact whatsapp_id: ${whatsappId}, isLid: ${isLid}, targetNumber: ${targetNumber}`);
-
-  // Determinar identificador correto da instância
-  const instanceIdentifier = instance.provider_type === 'evolution_cloud' && instance.instance_id_external
-    ? instance.instance_id_external
-    : instance.instance_name;
-
-  // Headers de autenticação
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'apikey': secrets.api_key,
-  };
-
-  let endpoint: string;
-  let payload: any;
-  let presenceType: string;
-
-  switch (queueItem.message_type) {
-    case 'text':
-      endpoint = `${secrets.api_url.replace(/\/$/, '')}/message/sendText/${instanceIdentifier}`;
-      payload = { number: targetNumber, text: queueItem.content };
-      presenceType = 'composing';
-      break;
-
-    case 'audio':
-      endpoint = `${secrets.api_url.replace(/\/$/, '')}/message/sendWhatsAppAudio/${instanceIdentifier}`;
-      payload = { number: targetNumber, audio: queueItem.media_url };
-      presenceType = 'recording';
-      break;
-
-    case 'image':
-      endpoint = `${secrets.api_url.replace(/\/$/, '')}/message/sendMedia/${instanceIdentifier}`;
-      payload = {
-        number: targetNumber,
-        mediatype: 'image',
-        media: queueItem.media_url,
-        caption: queueItem.content || '',
-      };
-      presenceType = 'composing';
-      break;
-
-    case 'document':
-      endpoint = `${secrets.api_url.replace(/\/$/, '')}/message/sendMedia/${instanceIdentifier}`;
-      payload = {
-        number: targetNumber,
-        mediatype: 'document',
-        media: queueItem.media_url,
-        caption: queueItem.content || '',
-        fileName: queueItem.metadata?.fileName || 'document',
-      };
-      presenceType = 'composing';
-      break;
-
-    default:
-      endpoint = `${secrets.api_url.replace(/\/$/, '')}/message/sendText/${instanceIdentifier}`;
-      payload = { number: targetNumber, text: queueItem.content };
-      presenceType = 'composing';
-  }
-
-  // Enviar presence ("digitando..." ou "gravando...") antes da mensagem
-  const presenceNumber = isLid ? whatsappId : `${targetNumber}@s.whatsapp.net`;
-  try {
-    const presenceUrl = `${secrets.api_url.replace(/\/$/, '')}/chat/sendPresence/${instanceIdentifier}`;
-    console.log(`[Sender] Sending presence '${presenceType}' to ${presenceNumber}`);
-    await fetch(presenceUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        number: presenceNumber,
-        delay: 3000,
-        presence: presenceType,
-      }),
-    });
-    // Aguardar um pouco para o "digitando" aparecer antes de enviar
-    await new Promise(resolve => setTimeout(resolve, 2000));
-  } catch (presenceErr) {
-    console.log('[Sender] Presence error (non-fatal):', presenceErr);
-  }
-
-  console.log(`[Sender] Evolution API endpoint: ${endpoint}`);
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
-
-  const responseText = await response.text();
-  console.log(`[Sender] Evolution response: ${response.status} - ${responseText.substring(0, 300)}`);
-
-  if (!response.ok) {
-    throw new Error(`Evolution API error: ${responseText}`);
-  }
-
-  let responseData;
-  try {
-    responseData = JSON.parse(responseText);
-  } catch {
-    responseData = { raw: responseText };
-  }
-
-  const whatsappMessageId = responseData?.key?.id || responseData?.messageId || responseData?.id;
-  console.log('[Sender] Evolution message sent, ID:', whatsappMessageId);
-
-  // Atualizar ou criar registro da mensagem
-  await updateMessageRecord(supabase, queueItem, whatsappMessageId);
-}
-
-// ========================================
-// OFFICIAL API SENDER (WhatsApp Cloud API)
-// ========================================
-async function sendViaOfficial(supabase: any, queueItem: any, settingsCache: Record<string, any>) {
-  console.log(`[Sender] Sending via Official API: ${queueItem.id}`);
-
-  // Buscar user_id da conversation para multi-tenancy
-  const { data: conversation, error: convError } = await supabase
-    .from('conversations')
-    .select('user_id')
-    .eq('id', queueItem.conversation_id)
-    .single();
-
-  if (convError || !conversation) {
-    console.error(`[Sender] Error fetching conversation ${queueItem.conversation_id}:`, convError);
-    throw new Error('Conversation not found');
-  }
-
-  const userId = conversation.user_id;
-  
-  // Buscar settings do cache ou do banco com fallback triplo
-  const cacheKey = userId || 'global';
-  let settings = settingsCache[cacheKey];
-  if (!settings) {
-    let settingsData = null;
-
-    // 1. Tentar por user_id da conversa
-    if (userId) {
-      const { data } = await supabase
-        .from('nina_settings')
-        .select('whatsapp_access_token, whatsapp_phone_number_id')
-        .eq('user_id', userId)
-        .maybeSingle();
-      settingsData = data;
+    if (!phoneNumberId || !accessToken) {
+      console.error('[Sender] Missing Meta API credentials');
+      return new Response(JSON.stringify({ error: 'Missing Meta credentials' }), { status: 500 });
     }
 
-    // 2. Fallback: buscar global (user_id IS NULL)
-    if (!settingsData) {
-      console.log('[Sender] No user-specific settings, trying global...');
-      const { data } = await supabase
-        .from('nina_settings')
-        .select('whatsapp_access_token, whatsapp_phone_number_id')
-        .is('user_id', null)
-        .maybeSingle();
-      settingsData = data;
+    let sent = 0;
+
+    for (const item of queueItems) {
+      try {
+        // Só processa se ainda estiver pending (evita corrida entre várias invocações do sender).
+        const { data: claimed } = await supabase
+          .from('send_queue')
+          .update({ status: 'processing' })
+          .eq('id', item.id)
+          .eq('status', 'pending')
+          .select('id, sent_at')
+          .maybeSingle();
+
+        if (!claimed) {
+          console.log(`[Sender] Skip ${item.id} — já enviado ou outro worker processando`);
+          continue;
+        }
+
+        if (claimed.sent_at) {
+          await supabase
+            .from('send_queue')
+            .update({ status: 'completed', error_message: null, updated_at: new Date().toISOString() })
+            .eq('id', item.id)
+            .eq('status', 'processing');
+          console.log(`[Sender] Skip ${item.id} — item já possuía sent_at`);
+          continue;
+        }
+
+        let phone: string;
+        if (item.override_phone) {
+          // Internal notification — route to explicit phone, not conversation contact
+          phone = item.override_phone.replace(/\D/g, '');
+          if (!phone.startsWith('55')) phone = `55${phone}`;
+        } else {
+          const { data: contact } = await supabase
+            .from('contacts')
+            .select('phone_number')
+            .eq('id', item.contact_id)
+            .single();
+
+          if (!contact?.phone_number) {
+            await supabase.from('send_queue').update({ status: 'failed', error_message: 'No phone number found' }).eq('id', item.id).eq('status', 'processing');
+            continue;
+          }
+
+          phone = contact.phone_number.replace(/\D/g, '');
+          if (!phone.startsWith('55')) phone = `55${phone}`;
+        }
+
+        // Build request body based on message_type
+        let td = item.template_data;
+        if (typeof td === 'string') {
+          try { td = JSON.parse(td); } catch { td = null; }
+        }
+        const isTemplate = item.message_type === 'template' && td != null;
+        let metaBody: Record<string, unknown>;
+
+        if (isTemplate) {
+          metaBody = {
+            messaging_product: 'whatsapp',
+            to: phone,
+            type: 'template',
+            template: {
+              name: td.name,
+              language: { code: td.language || 'pt_BR' },
+              components: td.components || [],
+            },
+          };
+          console.log(`[Sender] Sending template "${td.name}" to ${phone}`);
+        } else {
+          metaBody = {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: phone,
+            type: 'text',
+            text: { body: item.content },
+          };
+          console.log(`[Sender] Sending text to ${phone}`);
+        }
+
+        const controller = new AbortController();
+        const fetchTimeout = setTimeout(() => controller.abort(), 45_000);
+        let response: Response;
+        try {
+          response = await fetch(
+            `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify(metaBody),
+              signal: controller.signal,
+            }
+          );
+        } finally {
+          clearTimeout(fetchTimeout);
+        }
+
+        let data: any;
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
+
+        if (!response.ok) {
+          throw new Error(`Meta API error ${response.status}: ${data ? JSON.stringify(data) : '(non-JSON response)'}`);
+        }
+
+        const wamid = data?.messages?.[0]?.id || null;
+        console.log(`[Sender] Sent to ${phone}`, wamid);
+
+        // P1: insert no histórico ANTES de marcar sent — se o update falhar,
+        // o row fica em processing (recuperável), não sent sem histórico (irrecuperável).
+        // Notificações internas (override_phone) não entram no histórico de conversa do cliente.
+        if (!item.override_phone) {
+          const historyContent =
+            isTemplate && typeof item.content === 'string' && item.content.trim()
+              ? item.content.trim()
+              : isTemplate
+                ? `[Template: ${td.name}]`
+                : item.content;
+          const { error: insertErr } = await supabase.from('messages').insert({
+            conversation_id: item.conversation_id,
+            content: historyContent,
+            type: 'text',
+            from_type: 'nina',
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+            whatsapp_message_id: wamid,
+          });
+          if (insertErr) {
+            console.error(`[Sender] Failed to insert message history id=${item.id}:`, insertErr.message);
+          }
+        }
+
+        // P0: capturar erro do update — NÃO fazer throw para evitar que o catch
+        // marque como 'failed' e acione reenvio de mensagem já entregue.
+        const { error: sentErr } = await supabase
+          .from('send_queue')
+          .update({ status: 'completed', sent_at: new Date().toISOString(), error_message: null })
+          .eq('id', item.id)
+          .eq('status', 'processing');
+        if (sentErr) {
+          console.error(`[Sender] CRITICAL: message sent but queue not updated id=${item.id}:`, sentErr.message);
+        }
+
+        sent++;
+      } catch (err: any) {
+        console.error('[Sender] Error:', item.id, err.message);
+        const { error: failErr } = await supabase
+          .from('send_queue')
+          .update({ status: 'failed', error_message: err.message })
+          .eq('id', item.id)
+          .eq('status', 'processing');
+        if (failErr) {
+          console.error(`[Sender] Failed to mark as failed id=${item.id}:`, failErr.message);
+        }
+      }
     }
 
-    // 3. Último fallback: qualquer settings com WhatsApp configurado
-    if (!settingsData) {
-      console.log('[Sender] No global settings, fetching any with WhatsApp...');
-      const { data } = await supabase
-        .from('nina_settings')
-        .select('whatsapp_access_token, whatsapp_phone_number_id')
-        .not('whatsapp_phone_number_id', 'is', null)
-        .limit(1)
-        .maybeSingle();
-      settingsData = data;
-    }
+    console.log(`[Sender] Done: ${sent}/${queueItems.length} sent`);
+    return new Response(JSON.stringify({ sent, total: queueItems.length }), { status: 200 });
 
-    if (!settingsData) {
-      console.error('[Sender] No settings found with any fallback');
-      throw new Error('Settings not found');
-    }
-
-    if (!settingsData.whatsapp_access_token || !settingsData.whatsapp_phone_number_id) {
-      console.error('[Sender] WhatsApp not configured in settings');
-      throw new Error('WhatsApp not configured');
-    }
-
-    settings = settingsData;
-    settingsCache[cacheKey] = settings;
+  } catch (err: any) {
+    console.error('[Sender] Fatal error:', err.message);
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
-
-  // Get contact phone number
-  const { data: contact } = await supabase
-    .from('contacts')
-    .select('phone_number, whatsapp_id')
-    .eq('id', queueItem.contact_id)
-    .maybeSingle();
-
-  if (!contact) {
-    throw new Error('Contact not found');
-  }
-
-  const recipient = contact.whatsapp_id || contact.phone_number;
-
-  // Build WhatsApp API payload
-  let payload: any = {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: recipient
-  };
-
-  switch (queueItem.message_type) {
-    case 'text':
-      payload.type = 'text';
-      payload.text = { body: queueItem.content };
-      break;
-    
-    case 'image':
-      payload.type = 'image';
-      payload.image = { 
-        link: queueItem.media_url,
-        caption: queueItem.content || undefined
-      };
-      break;
-    
-    case 'audio':
-      payload.type = 'audio';
-      payload.audio = { link: queueItem.media_url };
-      break;
-    
-    case 'document':
-      payload.type = 'document';
-      payload.document = { 
-        link: queueItem.media_url,
-        filename: queueItem.content || 'document'
-      };
-      break;
-    
-    default:
-      payload.type = 'text';
-      payload.text = { body: queueItem.content };
-  }
-
-  console.log('[Sender] WhatsApp API payload:', JSON.stringify(payload, null, 2));
-
-  // Send via WhatsApp Cloud API
-  const response = await fetch(
-    `${WHATSAPP_API_URL}/${settings.whatsapp_phone_number_id}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${settings.whatsapp_access_token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    }
-  );
-
-  const responseData = await response.json();
-
-  if (!response.ok) {
-    console.error('[Sender] WhatsApp API error:', responseData);
-    throw new Error(responseData.error?.message || 'WhatsApp API error');
-  }
-
-  const whatsappMessageId = responseData.messages?.[0]?.id;
-  console.log('[Sender] Message sent, WA ID:', whatsappMessageId);
-
-  // Atualizar ou criar registro da mensagem
-  await updateMessageRecord(supabase, queueItem, whatsappMessageId);
-}
-
-// ========================================
-// HELPER: Atualizar registro da mensagem
-// ========================================
-async function updateMessageRecord(supabase: any, queueItem: any, whatsappMessageId: string | undefined) {
-  if (queueItem.message_id) {
-    // UPDATE existing message (for human messages)
-    console.log('[Sender] Updating existing message:', queueItem.message_id);
-    const { error: msgError } = await supabase
-      .from('messages')
-      .update({
-        whatsapp_message_id: whatsappMessageId,
-        status: 'sent',
-        sent_at: new Date().toISOString()
-      })
-      .eq('id', queueItem.message_id);
-
-    if (msgError) {
-      console.error('[Sender] Error updating message record:', msgError);
-    }
-  } else {
-    // INSERT new message (for Nina messages)
-    console.log('[Sender] Creating new message record');
-    const { error: msgError } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: queueItem.conversation_id,
-        whatsapp_message_id: whatsappMessageId,
-        content: queueItem.content,
-        type: queueItem.message_type,
-        from_type: queueItem.from_type,
-        status: 'sent',
-        media_url: queueItem.media_url || null,
-        sent_at: new Date().toISOString(),
-        metadata: queueItem.metadata || {}
-      });
-
-    if (msgError) {
-      console.error('[Sender] Error creating message record:', msgError);
-    }
-  }
-
-  // Update conversation last_message_at
-  await supabase
-    .from('conversations')
-    .update({ last_message_at: new Date().toISOString() })
-    .eq('id', queueItem.conversation_id);
-}
+});

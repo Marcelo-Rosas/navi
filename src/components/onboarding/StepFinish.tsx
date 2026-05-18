@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { OnboardingStep } from '@/hooks/useOnboardingStatus';
 import { supabase } from '@/integrations/supabase/client';
+import { parseFunctionError } from '@/lib/parseFunctionError';
 import { toast } from 'sonner';
 
 interface StepFinishProps {
@@ -64,7 +65,7 @@ const componentLabels: Record<string, string> = {
   agent_prompt: 'Agente IA',
   elevenlabs: 'ElevenLabs',
   business_hours: 'Horário Comercial',
-  lovable_ai: 'IA Backend',
+  ai_backend: 'IA Backend',
   pipeline: 'Pipeline de Vendas',
   profile: 'Perfil',
   nina_settings: 'Configurações Nina',
@@ -129,8 +130,17 @@ export const StepFinish: React.FC<StepFinishProps> = ({
   const requiredIncomplete = steps.filter(s => s.isRequired && !s.isComplete);
 
   const handleSendTest = async () => {
-    if (!testPhone) {
+    const phoneDigits = testPhone.replace(/\D/g, '');
+    if (!phoneDigits) {
       toast.error('Digite um número de telefone');
+      return;
+    }
+    if (phoneDigits.length < 10) {
+      toast.error('Número muito curto', { description: 'Use DDD + número (ex: 5511999999999)' });
+      return;
+    }
+    if (!testMessage.trim()) {
+      toast.error('Digite a mensagem de teste');
       return;
     }
 
@@ -138,16 +148,22 @@ export const StepFinish: React.FC<StepFinishProps> = ({
     try {
       const { data, error } = await supabase.functions.invoke('test-whatsapp-message', {
         body: {
-          phone: testPhone.replace(/\D/g, ''),
-          message: testMessage,
+          phone: phoneDigits,
+          message: testMessage.trim(),
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(await parseFunctionError(error, data));
+      }
+      if (data && data.success === false) {
+        throw new Error(data.error || 'Erro ao enviar mensagem de teste');
+      }
       toast.success('Mensagem de teste enviada!');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error sending test:', error);
-      toast.error(error.message || 'Erro ao enviar mensagem de teste');
+      const msg = error instanceof Error ? error.message : 'Erro ao enviar mensagem de teste';
+      toast.error('Falha no envio de teste', { description: msg });
     } finally {
       setIsSending(false);
     }

@@ -1,5 +1,10 @@
 -- 1. Habilitar Realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE public.broadcast_campaigns;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.broadcast_campaigns;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- 2. Remover políticas antigas
 DROP POLICY IF EXISTS "Authenticated users can access broadcast_campaigns" ON public.broadcast_campaigns;

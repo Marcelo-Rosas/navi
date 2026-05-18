@@ -40,7 +40,7 @@ const itemVariants = {
 // Generate a unique verify token
 const generateVerifyToken = (): string => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = 'viver-ia-';
+  let result = 'navi-webhook-';
   for (let i = 0; i < 16; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -63,7 +63,7 @@ export const StepWhatsApp: React.FC<StepWhatsAppProps> = ({
 
   // Auto-generate verify token if empty or default
   useEffect(() => {
-    if (!verifyToken || verifyToken === 'viver-de-ia-nina-webhook') {
+    if (!verifyToken || verifyToken === 'viver-de-ia-nina-webhook' || verifyToken === 'navi-webhook') {
       onVerifyTokenChange(generateVerifyToken());
     }
   }, []);

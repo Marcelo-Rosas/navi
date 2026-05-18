@@ -2,7 +2,7 @@
 -- =============================================
 -- TABELA: broadcast_campaigns
 -- =============================================
-CREATE TABLE public.broadcast_campaigns (
+CREATE TABLE IF NOT EXISTS public.broadcast_campaigns (
   id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id uuid NOT NULL,
   name text NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE public.broadcast_campaigns (
 -- =============================================
 -- TABELA: broadcast_recipients
 -- =============================================
-CREATE TABLE public.broadcast_recipients (
+CREATE TABLE IF NOT EXISTS public.broadcast_recipients (
   id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   campaign_id uuid NOT NULL REFERENCES public.broadcast_campaigns(id) ON DELETE CASCADE,
   phone_number text NOT NULL,
@@ -41,11 +41,11 @@ CREATE TABLE public.broadcast_recipients (
 -- =============================================
 -- INDEXES
 -- =============================================
-CREATE INDEX idx_broadcast_campaigns_user_id ON public.broadcast_campaigns(user_id);
-CREATE INDEX idx_broadcast_campaigns_status ON public.broadcast_campaigns(status);
-CREATE INDEX idx_broadcast_recipients_campaign_id ON public.broadcast_recipients(campaign_id);
-CREATE INDEX idx_broadcast_recipients_status ON public.broadcast_recipients(status);
-CREATE INDEX idx_broadcast_recipients_campaign_status ON public.broadcast_recipients(campaign_id, status);
+CREATE INDEX IF NOT EXISTS idx_broadcast_campaigns_user_id ON public.broadcast_campaigns(user_id);
+CREATE INDEX IF NOT EXISTS idx_broadcast_campaigns_status ON public.broadcast_campaigns(status);
+CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_campaign_id ON public.broadcast_recipients(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_status ON public.broadcast_recipients(status);
+CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_campaign_status ON public.broadcast_recipients(campaign_id, status);
 
 -- =============================================
 -- RLS: broadcast_campaigns
@@ -80,4 +80,9 @@ CREATE TRIGGER update_broadcast_campaigns_updated_at
 -- =============================================
 -- REALTIME: habilitar para acompanhar progresso
 -- =============================================
-ALTER PUBLICATION supabase_realtime ADD TABLE public.broadcast_campaigns;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.broadcast_campaigns;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;

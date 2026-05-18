@@ -19,14 +19,14 @@ const SystemRoadmap: React.FC = () => {
 
   const sections: Section[] = [
     {
-      id: 'post-remix-checklist',
-      title: '🔄 Checklist Pós-Remix (IMPORTANTE)',
+      id: 'post-setup-checklist',
+      title: '🔄 Checklist Pós-Setup (IMPORTANTE)',
       icon: AlertTriangle,
       content: (
         <div className="space-y-6">
           <div className="bg-gradient-to-br from-amber-500/10 to-red-500/10 border border-amber-500/20 rounded-lg p-6">
             <p className="text-slate-300 mb-4">
-              <strong className="text-amber-400">ATENÇÃO:</strong> Após remixar o projeto, você DEVE configurar manualmente os seguintes itens para o sistema funcionar corretamente:
+              <strong className="text-amber-400">ATENÇÃO:</strong> Após clonar e configurar o projeto localmente, você DEVE revisar os seguintes itens para o sistema funcionar corretamente:
             </p>
             
             <div className="space-y-6">
@@ -758,7 +758,7 @@ verify_jwt = false`}</pre>
                   <li>• PostgreSQL (banco de dados)</li>
                   <li>• Row Level Security (RLS)</li>
                   <li>• Realtime subscriptions (WebSocket)</li>
-                  <li>• Lovable AI Gateway (Gemini/GPT)</li>
+                  <li>• Backend de IA (Gemini/GPT/Anthropic)</li>
                   <li>• WhatsApp Cloud API</li>
                   <li>• ElevenLabs TTS API</li>
                 </ul>
@@ -777,7 +777,7 @@ PostgreSQL (contacts, conversations, messages)
       ↓
 [nina-orchestrator] Edge Function
       ↓
-Lovable AI Gateway (Gemini/GPT)
+Backend de IA (Gemini/GPT/Anthropic)
       ↓
 [whatsapp-sender] Edge Function
       ↓
@@ -1519,7 +1519,7 @@ const response = await fetch(
 │  • Busca context: contato + conversa + histórico           │
 │  • Verifica se deve responder (auto_response_enabled)       │
 │  • Processa templates dinâmicos ({{ data_hora }}, etc)     │
-│  • Envia prompt ao Lovable AI Gateway                       │
+│  • Envia prompt ao backend de IA                            │
 │  • Recebe resposta da IA                                    │
 └────────────────────┬────────────────────────────────────────┘
                      ↓
@@ -1564,7 +1564,7 @@ const response = await fetch(
 │ [analyze-conversation] Edge Function                        │
 │  • Busca todas as mensagens da conversa                     │
 │  • Monta prompt de análise com histórico completo          │
-│  • Envia ao Lovable AI Gateway (Gemini 2.5 Flash)          │
+│  • Envia ao backend de IA (Gemini 2.5 Flash)               │
 └────────────────────┬────────────────────────────────────────┘
                      ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -2302,7 +2302,7 @@ const transformConversation = (dbConv: DBConversation): UIConversation => {
                 <h4 className="text-cyan-400 font-bold mb-3 text-sm">1. Variáveis de Ambiente (.env)</h4>
                 <div className="bg-slate-950 border border-slate-700 rounded-lg p-4">
                   <p className="text-xs text-slate-400 mb-3">
-                    <strong>⚠️ Gerenciadas automaticamente pelo Supabase/Lovable Cloud</strong> - Não editar manualmente:
+                    <strong>⚠️ Gerenciadas automaticamente pelo Supabase/Cloud</strong> - Não editar manualmente:
                   </p>
                   <ul className="text-sm text-slate-300 space-y-2 font-mono">
                     <li className="flex items-start gap-2">
@@ -2357,9 +2357,9 @@ const transformConversation = (dbConv: DBConversation): UIConversation => {
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-blue-400 mb-2">IA (Lovable AI Gateway)</p>
+                      <p className="text-xs font-bold text-blue-400 mb-2">IA (Backend configurado)</p>
                       <ul className="text-sm text-slate-300 space-y-1 pl-4">
-                        <li className="text-xs">✅ O sistema usa <strong>Lovable AI Gateway</strong> (Gemini/GPT)</li>
+                        <li className="text-xs">✅ O sistema usa um <strong>backend de IA configurado</strong> (Gemini/GPT/Anthropic)</li>
                         <li className="text-xs">Não requer API key própria da OpenAI</li>
                       </ul>
                     </div>
@@ -2374,7 +2374,7 @@ const transformConversation = (dbConv: DBConversation): UIConversation => {
               <span className="text-amber-400 font-bold">⚠️</span>
               <span>
                 <strong>Importante:</strong> Nunca commitar credenciais no código. Todas as secrets devem estar em nina_settings 
-                ou em variáveis de ambiente gerenciadas pelo Lovable/Supabase.
+                ou em variáveis de ambiente gerenciadas pelo Supabase.
               </span>
             </p>
           </div>

@@ -324,7 +324,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
       systemPrompt, aiModelMode, elevenLabsApiKey, audioResponseEnabled,
       timezone, businessHoursStart, businessHoursEnd, businessDays]);
 
-  const saveSettings = useCallback(async () => {
+  const saveSettings = useCallback(async (opts?: { markWizardCompleted?: boolean }) => {
     if (!user) {
       console.error('[OnboardingWizard] ❌ No user found, cannot save settings');
       toast.error('Erro: usuário não autenticado');
@@ -406,6 +406,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
         // Ensure Nina is active
         is_active: true,
         auto_response_enabled: true,
+        ...(opts?.markWizardCompleted
+          ? { onboarding_wizard_completed_at: new Date().toISOString() }
+          : {}),
       };
 
       console.log('[OnboardingWizard] Step 2: Settings object built:', {
@@ -560,7 +563,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
   };
 
   const handleComplete = async () => {
-    await saveSettings();
+    const ok = await saveSettings({ markWizardCompleted: true });
+    if (!ok) return;
     markWizardSeen();
     fireConfetti();
     toast.success('Configuração concluída! Bem-vindo ao sistema.');

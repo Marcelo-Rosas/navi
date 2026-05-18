@@ -126,6 +126,12 @@ export function useOnboardingStatus(): OnboardingStatus {
       const hasConnectedInstance = !!(connectedInstances && connectedInstances.length > 0);
 
       if (settings) {
+        const lsWizard =
+          typeof window !== 'undefined' &&
+          localStorage.getItem(WIZARD_SEEN_KEY) === 'true';
+        const wizardDone =
+          !!settings.onboarding_wizard_completed_at || lsWizard;
+
         setSteps(prev => prev.map(step => {
           switch (step.id) {
             case 'identity':
@@ -146,7 +152,10 @@ export function useOnboardingStatus(): OnboardingStatus {
             case 'agent':
               return {
                 ...step,
-                isComplete: !!(settings.company_name && settings.sdr_name),
+                isComplete: !!(
+                  settings.system_prompt_override?.trim() ||
+                  (settings.company_name && settings.sdr_name)
+                ),
               };
             case 'elevenlabs':
               return {
@@ -161,7 +170,7 @@ export function useOnboardingStatus(): OnboardingStatus {
                 JSON.stringify(settings.business_days) === '[1,2,3,4,5]';
               return {
                 ...step,
-                isComplete: !isDefaultConfig || hasSeenWizard,
+                isComplete: !isDefaultConfig || wizardDone,
               };
             case 'verification':
               return {
@@ -171,19 +180,28 @@ export function useOnboardingStatus(): OnboardingStatus {
             case 'finish':
               return {
                 ...step,
-                isComplete: hasSeenWizard,
+                isComplete: wizardDone,
               };
             default:
               return step;
           }
         }));
+
+        if (settings.onboarding_wizard_completed_at) {
+          setHasSeenWizard(true);
+          try {
+            localStorage.setItem(WIZARD_SEEN_KEY, 'true');
+          } catch {
+            /* modo privado / storage indisponível */
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching onboarding status:', error);
     } finally {
       setLoading(false);
     }
-  }, [hasSeenWizard, user]);
+  }, [user]);
 
   useEffect(() => {
     fetchStatus();
@@ -206,14 +224,35 @@ export function useOnboardingStatus(): OnboardingStatus {
   }, []);
 
   const requiredSteps = steps.filter(s => s.isRequired);
-  const completedRequired = requiredSteps.filter(s => s.isComplete).length;
-  const allStepsComplete = steps.every(s => s.isComplete);
+  const requiredComplete =
+    requiredSteps.length > 0 && requiredSteps.every(s => s.isComplete);
+  /**
+   * Passos que realmente bloqueiam o uso do sistema (não inclui "Conectar WhatsApp",
+   * pois o status na tabela whatsapp_instances pode divergir da realidade).
+   */
+  const CORE_REQUIRED_IDS = ['identity', 'whatsapp', 'agent'] as const;
+  const coreComplete = CORE_REQUIRED_IDS.every((id) => {
+    const step = steps.find((s) => s.id === id);
+    return step?.isComplete;
+  });
+  /**
+   * Oculta o banner se: wizard concluído (localStorage ou coluna no banco), OU
+   * identidade + Evolution + agente OK, OU tudo obrigatório (incl. WhatsApp conectado no DB).
+   */
+  const isComplete =
+    hasSeenWizard || coreComplete || requiredComplete;
   const currentStepIndex = steps.findIndex(s => !s.isComplete);
-  const completionPercentage = Math.round((steps.filter(s => s.isComplete).length / steps.length) * 100);
+  const completionPercentage = (() => {
+    if (isComplete) return 100;
+    const req = requiredSteps.length;
+    if (!req) return 0;
+    const done = requiredSteps.filter(s => s.isComplete).length;
+    return Math.round((done / req) * 100);
+  })();
 
   return {
     loading,
-    isComplete: allStepsComplete,
+    isComplete,
     currentStep: currentStepIndex === -1 ? steps.length - 1 : currentStepIndex,
     steps,
     completionPercentage,

@@ -339,31 +339,36 @@ const Kanban: React.FC = () => {
             const totalValue = columnDeals.reduce((acc, curr) => acc + curr.value, 0);
             const isWonColumn = column.title === 'Ganho';
             const isLostColumn = column.title === 'Perdido';
+            const isNegotiationColumn = column.title.toLowerCase().includes('negocia');
 
             return (
               <div 
                 key={column.id}
                 className={`w-72 flex flex-col h-full rounded-xl border backdrop-blur-sm ${
-                  isWonColumn 
-                    ? 'bg-emerald-50 border-emerald-200' 
-                    : isLostColumn 
-                      ? 'bg-red-50 border-red-200' 
-                      : 'bg-muted/30 border-border'
+                  isWonColumn
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : isLostColumn
+                      ? 'bg-red-50 border-red-200'
+                      : isNegotiationColumn
+                        ? 'bg-orange-50 border-orange-200'
+                        : 'bg-muted/30 border-border'
                 }`}
                 onDragOver={onDragOver}
                 onDrop={(e) => onDrop(e, column.id)}
               >
                 {/* Column Header */}
                 <div className={`p-3 border-b flex flex-col gap-1 rounded-t-xl ${
-                  isWonColumn 
-                    ? 'bg-emerald-100 border-emerald-200 border-t-4 border-t-emerald-500' 
-                    : isLostColumn 
-                      ? 'bg-red-100 border-red-200 border-t-4 border-t-red-500' 
-                      : `border-border border-t-2 ${column.color}`
+                  isWonColumn
+                    ? 'bg-emerald-100 border-emerald-200 border-t-4 border-t-emerald-500'
+                    : isLostColumn
+                      ? 'bg-red-100 border-red-200 border-t-4 border-t-red-500'
+                      : isNegotiationColumn
+                        ? 'bg-orange-100 border-orange-200 border-t-4 border-t-orange-500'
+                        : `border-border border-t-2 ${column.color}`
                 }`}>
                   <div className="flex justify-between items-center">
                     <h3 className={`font-bold text-xs uppercase tracking-wide flex items-center gap-1.5 ${
-                      isWonColumn ? 'text-emerald-700' : isLostColumn ? 'text-red-700' : 'text-foreground'
+                      isWonColumn ? 'text-emerald-700' : isLostColumn ? 'text-red-700' : isNegotiationColumn ? 'text-orange-700' : 'text-foreground'
                     }`}>
                       {column.isAiManaged && (
                         <span title="Gerenciado pela IA">
@@ -373,15 +378,17 @@ const Kanban: React.FC = () => {
                       {column.title}
                     </h3>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
-                      isWonColumn 
-                        ? 'bg-emerald-200 text-emerald-700' 
-                        : isLostColumn 
-                          ? 'bg-red-200 text-red-700' 
-                          : 'bg-muted text-muted-foreground'
+                      isWonColumn
+                        ? 'bg-emerald-200 text-emerald-700'
+                        : isLostColumn
+                          ? 'bg-red-200 text-red-700'
+                          : isNegotiationColumn
+                            ? 'bg-orange-200 text-orange-700'
+                            : 'bg-muted text-muted-foreground'
                     }`}>{columnDeals.length}</span>
                   </div>
                   <div className="text-[10px] text-muted-foreground font-medium">
-                     Total: <span className={isWonColumn ? 'text-emerald-700' : isLostColumn ? 'text-red-700' : 'text-foreground'}>{formatCurrency(totalValue)}</span>
+                     Total: <span className={isWonColumn ? 'text-emerald-700' : isLostColumn ? 'text-red-700' : isNegotiationColumn ? 'text-orange-700' : 'text-foreground'}>{formatCurrency(totalValue)}</span>
                   </div>
                 </div>
 

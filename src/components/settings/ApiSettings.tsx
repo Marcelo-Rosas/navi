@@ -1,9 +1,10 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle, useRef, useCallback } from 'react';
-import { Save, MessageSquare, Mic, Eye, EyeOff, Copy, Check, Loader2, Send, ChevronDown, Volume2, Download, Upload, FileAudio, HelpCircle, Smartphone, Wifi, WifiOff, CheckCircle2, XCircle } from 'lucide-react';
+import { Save, MessageSquare, Mic, Eye, EyeOff, Copy, Check, Loader2, Send, ChevronDown, Volume2, Download, Upload, FileAudio, HelpCircle, Smartphone, Server, Wifi, WifiOff, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '../Button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import * as Collapsible from '@radix-ui/react-collapsible';
+import { parseFunctionError } from '@/lib/parseFunctionError';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { useAuth } from '@/hooks/useAuth';
 import { WhatsAppInstancesManager } from './WhatsAppInstancesManager';
@@ -280,6 +281,12 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
     setTimeout(() => setCopiedWebhook(false), 2000);
   };
 
+  const copyVerifyToken = () => {
+    if (!settings.whatsapp_verify_token) return;
+    navigator.clipboard.writeText(settings.whatsapp_verify_token);
+    toast.success('Verify Token copiado!');
+  };
+
   const handleTestEvolutionConnection = async () => {
     if (!settings.evolution_api_url || !settings.evolution_api_key) {
       toast.error('Preencha a URL e a API Key da Evolution antes de testar');
@@ -382,12 +389,24 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
     a.click();
   };
 
+  const metaConfigured = !!(settings.whatsapp_access_token?.trim() && settings.whatsapp_phone_number_id?.trim());
+
   const handleTestMessage = async () => {
-    if (!settings.whatsapp_access_token || !settings.whatsapp_phone_number_id) {
-      toast.error('⚠️ Preencha e SALVE as credenciais do WhatsApp primeiro!', {
-        description: 'Clique em "Salvar Alterações" no topo da página antes de testar.'
-      });
-      return;
+    if (!metaConfigured) {
+      const { data: connectedInstance } = await supabase
+        .from('whatsapp_instances')
+        .select('id')
+        .eq('is_active', true)
+        .eq('status', 'connected')
+        .limit(1)
+        .maybeSingle();
+
+      if (!connectedInstance) {
+        toast.error('Configure o WhatsApp antes de testar', {
+          description: 'Preencha Access Token e Phone Number ID (Meta) ou conecte uma instância Evolution.',
+        });
+        return;
+      }
     }
 
     if (!testPhone.trim()) {
@@ -410,11 +429,15 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
       const { data, error } = await supabase.functions.invoke('test-whatsapp-message', {
         body: {
           phone_number: testPhone,
-          message: testMessage
-        }
+          message: testMessage.trim(),
+          whatsapp_access_token: settings.whatsapp_access_token,
+          whatsapp_phone_number_id: settings.whatsapp_phone_number_id,
+        },
       });
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(await parseFunctionError(error, data));
+      }
 
       if (data?.success) {
         toast.success('Mensagem enviada com sucesso! ✅', {

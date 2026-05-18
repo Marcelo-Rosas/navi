@@ -37,117 +37,167 @@ SET row_security = off;
 -- Name: app_role; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.app_role AS ENUM (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
+    CREATE TYPE public.app_role AS ENUM (
     'admin',
     'user'
 );
+  END IF;
+END $$;
 
 
 --
 -- Name: appointment_type; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.appointment_type AS ENUM (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'appointment_type') THEN
+    CREATE TYPE public.appointment_type AS ENUM (
     'demo',
     'meeting',
     'support',
     'followup'
 );
+  END IF;
+END $$;
 
 
 --
 -- Name: conversation_status; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.conversation_status AS ENUM (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'conversation_status') THEN
+    CREATE TYPE public.conversation_status AS ENUM (
     'nina',
     'human',
     'paused'
 );
+  END IF;
+END $$;
 
 
 --
 -- Name: member_role; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.member_role AS ENUM (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'member_role') THEN
+    CREATE TYPE public.member_role AS ENUM (
     'admin',
     'manager',
     'agent'
 );
+  END IF;
+END $$;
 
 
 --
 -- Name: member_status; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.member_status AS ENUM (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'member_status') THEN
+    CREATE TYPE public.member_status AS ENUM (
     'active',
     'invited',
     'disabled'
 );
+  END IF;
+END $$;
 
 
 --
 -- Name: message_from; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.message_from AS ENUM (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_from') THEN
+    CREATE TYPE public.message_from AS ENUM (
     'user',
     'nina',
     'human'
 );
+  END IF;
+END $$;
 
 
 --
 -- Name: message_status; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.message_status AS ENUM (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_status') THEN
+    CREATE TYPE public.message_status AS ENUM (
     'sent',
     'delivered',
     'read',
     'failed',
     'processing'
 );
+  END IF;
+END $$;
 
 
 --
 -- Name: message_type; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.message_type AS ENUM (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_type') THEN
+    CREATE TYPE public.message_type AS ENUM (
     'text',
     'audio',
     'image',
     'document',
     'video'
 );
+  END IF;
+END $$;
 
 
 --
 -- Name: queue_status; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.queue_status AS ENUM (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'queue_status') THEN
+    CREATE TYPE public.queue_status AS ENUM (
     'pending',
     'processing',
     'completed',
     'failed'
 );
+  END IF;
+END $$;
 
 
 --
 -- Name: team_assignment; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.team_assignment AS ENUM (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'team_assignment') THEN
+    CREATE TYPE public.team_assignment AS ENUM (
     'mateus',
     'igor',
     'fe',
     'vendas',
     'suporte'
 );
+  END IF;
+END $$;
 
 
 SET default_table_access_method = heap;
@@ -156,7 +206,7 @@ SET default_table_access_method = heap;
 -- Name: message_processing_queue; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.message_processing_queue (
+CREATE TABLE IF NOT EXISTS public.message_processing_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     whatsapp_message_id text NOT NULL,
     phone_number_id text NOT NULL,
@@ -176,7 +226,7 @@ CREATE TABLE public.message_processing_queue (
 -- Name: claim_message_processing_batch(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.claim_message_processing_batch(p_limit integer DEFAULT 50) RETURNS SETOF public.message_processing_queue
+CREATE OR REPLACE FUNCTION public.claim_message_processing_batch(p_limit integer DEFAULT 50) RETURNS SETOF public.message_processing_queue
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -203,7 +253,7 @@ $$;
 -- Name: nina_processing_queue; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.nina_processing_queue (
+CREATE TABLE IF NOT EXISTS public.nina_processing_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     message_id uuid NOT NULL,
     conversation_id uuid NOT NULL,
@@ -224,7 +274,7 @@ CREATE TABLE public.nina_processing_queue (
 -- Name: claim_nina_processing_batch(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.claim_nina_processing_batch(p_limit integer DEFAULT 50) RETURNS SETOF public.nina_processing_queue
+CREATE OR REPLACE FUNCTION public.claim_nina_processing_batch(p_limit integer DEFAULT 50) RETURNS SETOF public.nina_processing_queue
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -251,7 +301,7 @@ $$;
 -- Name: send_queue; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.send_queue (
+CREATE TABLE IF NOT EXISTS public.send_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     conversation_id uuid NOT NULL,
     contact_id uuid NOT NULL,
@@ -276,7 +326,7 @@ CREATE TABLE public.send_queue (
 -- Name: claim_send_queue_batch(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.claim_send_queue_batch(p_limit integer DEFAULT 10) RETURNS SETOF public.send_queue
+CREATE OR REPLACE FUNCTION public.claim_send_queue_batch(p_limit integer DEFAULT 10) RETURNS SETOF public.send_queue
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -303,7 +353,7 @@ $$;
 -- Name: cleanup_processed_message_queue(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cleanup_processed_message_queue() RETURNS void
+CREATE OR REPLACE FUNCTION public.cleanup_processed_message_queue() RETURNS void
     LANGUAGE plpgsql
     SET search_path TO 'public'
     AS $$
@@ -318,7 +368,7 @@ $$;
 -- Name: cleanup_processed_queues(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cleanup_processed_queues() RETURNS void
+CREATE OR REPLACE FUNCTION public.cleanup_processed_queues() RETURNS void
     LANGUAGE plpgsql
     SET search_path TO 'public'
     AS $$
@@ -348,7 +398,7 @@ $$;
 -- Name: create_deal_for_new_contact(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.create_deal_for_new_contact() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.create_deal_for_new_contact() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -389,7 +439,7 @@ $$;
 -- Name: get_auth_user_id(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.get_auth_user_id() RETURNS uuid
+CREATE OR REPLACE FUNCTION public.get_auth_user_id() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -401,7 +451,7 @@ $$;
 -- Name: conversation_states; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.conversation_states (
+CREATE TABLE IF NOT EXISTS public.conversation_states (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     conversation_id uuid NOT NULL,
     current_state text DEFAULT 'idle'::text NOT NULL,
@@ -417,7 +467,7 @@ CREATE TABLE public.conversation_states (
 -- Name: get_or_create_conversation_state(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.get_or_create_conversation_state(p_conversation_id uuid) RETURNS public.conversation_states
+CREATE OR REPLACE FUNCTION public.get_or_create_conversation_state(p_conversation_id uuid) RETURNS public.conversation_states
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -443,7 +493,7 @@ $$;
 -- Name: handle_new_user(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.handle_new_user() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -467,7 +517,7 @@ $$;
 -- Name: has_role(uuid, public.app_role); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.has_role(_user_id uuid, _role public.app_role) RETURNS boolean
+CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role public.app_role) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -484,7 +534,7 @@ $$;
 -- Name: update_client_memory(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.update_client_memory(p_contact_id uuid, p_new_memory jsonb) RETURNS void
+CREATE OR REPLACE FUNCTION public.update_client_memory(p_contact_id uuid, p_new_memory jsonb) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -500,7 +550,7 @@ $$;
 -- Name: update_conversation_last_message(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.update_conversation_last_message() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.update_conversation_last_message() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -526,7 +576,7 @@ $$;
 -- Name: update_conversation_state(uuid, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.update_conversation_state(p_conversation_id uuid, p_new_state text, p_action text DEFAULT NULL::text, p_context jsonb DEFAULT NULL::jsonb) RETURNS public.conversation_states
+CREATE OR REPLACE FUNCTION public.update_conversation_state(p_conversation_id uuid, p_new_state text, p_action text DEFAULT NULL::text, p_context jsonb DEFAULT NULL::jsonb) RETURNS public.conversation_states
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -560,7 +610,7 @@ $$;
 -- Name: update_updated_at_column(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.update_updated_at_column() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.update_updated_at_column() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -575,7 +625,7 @@ $$;
 -- Name: appointments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.appointments (
+CREATE TABLE IF NOT EXISTS public.appointments (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     title text NOT NULL,
     description text,
@@ -598,7 +648,7 @@ CREATE TABLE public.appointments (
 -- Name: contacts; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.contacts (
+CREATE TABLE IF NOT EXISTS public.contacts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     phone_number text NOT NULL,
     whatsapp_id text,
@@ -627,7 +677,7 @@ ALTER TABLE ONLY public.contacts REPLICA IDENTITY FULL;
 -- Name: conversations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.conversations (
+CREATE TABLE IF NOT EXISTS public.conversations (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     contact_id uuid NOT NULL,
     status public.conversation_status DEFAULT 'nina'::public.conversation_status NOT NULL,
@@ -651,7 +701,7 @@ ALTER TABLE ONLY public.conversations REPLICA IDENTITY FULL;
 -- Name: messages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.messages (
+CREATE TABLE IF NOT EXISTS public.messages (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     conversation_id uuid NOT NULL,
     reply_to_id uuid,
@@ -678,7 +728,7 @@ ALTER TABLE ONLY public.messages REPLICA IDENTITY FULL;
 -- Name: contacts_with_stats; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.contacts_with_stats WITH (security_invoker='true') AS
+CREATE OR REPLACE VIEW public.contacts_with_stats WITH (security_invoker='true') AS
  SELECT c.id,
     c.phone_number,
     c.whatsapp_id,
@@ -729,7 +779,7 @@ CREATE VIEW public.contacts_with_stats WITH (security_invoker='true') AS
 -- Name: deal_activities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.deal_activities (
+CREATE TABLE IF NOT EXISTS public.deal_activities (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     deal_id uuid NOT NULL,
     type text DEFAULT 'note'::text NOT NULL,
@@ -749,7 +799,7 @@ CREATE TABLE public.deal_activities (
 -- Name: deals; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.deals (
+CREATE TABLE IF NOT EXISTS public.deals (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     contact_id uuid,
     title text NOT NULL,
@@ -777,7 +827,7 @@ ALTER TABLE ONLY public.deals REPLICA IDENTITY FULL;
 -- Name: message_grouping_queue; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.message_grouping_queue (
+CREATE TABLE IF NOT EXISTS public.message_grouping_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     whatsapp_message_id text NOT NULL,
     phone_number_id text NOT NULL,
@@ -794,7 +844,7 @@ CREATE TABLE public.message_grouping_queue (
 -- Name: nina_settings; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.nina_settings (
+CREATE TABLE IF NOT EXISTS public.nina_settings (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
     system_prompt_override text,
@@ -839,7 +889,7 @@ CREATE TABLE public.nina_settings (
 -- Name: pipeline_stages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.pipeline_stages (
+CREATE TABLE IF NOT EXISTS public.pipeline_stages (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     title text NOT NULL,
     color text DEFAULT 'border-slate-500'::text NOT NULL,
@@ -860,7 +910,7 @@ ALTER TABLE ONLY public.pipeline_stages REPLICA IDENTITY FULL;
 -- Name: profiles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.profiles (
+CREATE TABLE IF NOT EXISTS public.profiles (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
     full_name text,
@@ -874,7 +924,7 @@ CREATE TABLE public.profiles (
 -- Name: tag_definitions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.tag_definitions (
+CREATE TABLE IF NOT EXISTS public.tag_definitions (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     key text NOT NULL,
     label text NOT NULL,
@@ -891,7 +941,7 @@ CREATE TABLE public.tag_definitions (
 -- Name: team_functions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.team_functions (
+CREATE TABLE IF NOT EXISTS public.team_functions (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,
     description text,
@@ -906,7 +956,7 @@ CREATE TABLE public.team_functions (
 -- Name: team_members; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.team_members (
+CREATE TABLE IF NOT EXISTS public.team_members (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,
     email text NOT NULL,
@@ -927,7 +977,7 @@ CREATE TABLE public.team_members (
 -- Name: teams; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.teams (
+CREATE TABLE IF NOT EXISTS public.teams (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,
     description text,
@@ -943,7 +993,7 @@ CREATE TABLE public.teams (
 -- Name: user_roles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.user_roles (
+CREATE TABLE IF NOT EXISTS public.user_roles (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
     role public.app_role DEFAULT 'user'::public.app_role NOT NULL,
@@ -1179,335 +1229,336 @@ ALTER TABLE ONLY public.user_roles
 -- Name: idx_appointments_metadata_source; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_appointments_metadata_source ON public.appointments USING gin (metadata jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS idx_appointments_metadata_source ON public.appointments USING gin (metadata jsonb_path_ops);
 
 
 --
 -- Name: idx_contacts_created_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_contacts_created_at ON public.contacts USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_contacts_created_at ON public.contacts USING btree (created_at DESC);
 
 
 --
 -- Name: idx_contacts_is_blocked; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_contacts_is_blocked ON public.contacts USING btree (is_blocked);
+CREATE INDEX IF NOT EXISTS idx_contacts_is_blocked ON public.contacts USING btree (is_blocked);
 
 
 --
 -- Name: idx_contacts_last_activity; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_contacts_last_activity ON public.contacts USING btree (last_activity DESC);
+CREATE INDEX IF NOT EXISTS idx_contacts_last_activity ON public.contacts USING btree (last_activity DESC);
 
 
 --
 -- Name: idx_contacts_phone_number; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_contacts_phone_number ON public.contacts USING btree (phone_number);
+CREATE INDEX IF NOT EXISTS idx_contacts_phone_number ON public.contacts USING btree (phone_number);
 
 
 --
 -- Name: idx_contacts_tags; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_contacts_tags ON public.contacts USING gin (tags);
+CREATE INDEX IF NOT EXISTS idx_contacts_tags ON public.contacts USING gin (tags);
 
 
 --
 -- Name: idx_contacts_whatsapp_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_contacts_whatsapp_id ON public.contacts USING btree (whatsapp_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_whatsapp_id ON public.contacts USING btree (whatsapp_id);
 
 
 --
 -- Name: idx_conversation_states_conversation_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_conversation_states_conversation_id ON public.conversation_states USING btree (conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_states_conversation_id ON public.conversation_states USING btree (conversation_id);
 
 
 --
 -- Name: idx_conversation_states_current_state; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_conversation_states_current_state ON public.conversation_states USING btree (current_state);
+CREATE INDEX IF NOT EXISTS idx_conversation_states_current_state ON public.conversation_states USING btree (current_state);
 
 
 --
 -- Name: idx_conversations_contact_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_conversations_contact_id ON public.conversations USING btree (contact_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_contact_id ON public.conversations USING btree (contact_id);
 
 
 --
 -- Name: idx_conversations_created_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_conversations_created_at ON public.conversations USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON public.conversations USING btree (created_at DESC);
 
 
 --
 -- Name: idx_conversations_is_active; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_conversations_is_active ON public.conversations USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_conversations_is_active ON public.conversations USING btree (is_active);
 
 
 --
 -- Name: idx_conversations_last_message_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_conversations_last_message_at ON public.conversations USING btree (last_message_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON public.conversations USING btree (last_message_at DESC);
 
 
 --
 -- Name: idx_conversations_status; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_conversations_status ON public.conversations USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_conversations_status ON public.conversations USING btree (status);
 
 
 --
 -- Name: idx_conversations_tags; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_conversations_tags ON public.conversations USING gin (tags);
+CREATE INDEX IF NOT EXISTS idx_conversations_tags ON public.conversations USING gin (tags);
 
 
 --
 -- Name: idx_deal_activities_created_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_deal_activities_created_at ON public.deal_activities USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_deal_activities_created_at ON public.deal_activities USING btree (created_at DESC);
 
 
 --
 -- Name: idx_deal_activities_deal_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_deal_activities_deal_id ON public.deal_activities USING btree (deal_id);
+CREATE INDEX IF NOT EXISTS idx_deal_activities_deal_id ON public.deal_activities USING btree (deal_id);
 
 
 --
 -- Name: idx_message_grouping_queue_created_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_message_grouping_queue_created_at ON public.message_grouping_queue USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_message_grouping_queue_created_at ON public.message_grouping_queue USING btree (created_at);
 
 
 --
 -- Name: idx_message_grouping_queue_message_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_message_grouping_queue_message_id ON public.message_grouping_queue USING btree (message_id);
+CREATE INDEX IF NOT EXISTS idx_message_grouping_queue_message_id ON public.message_grouping_queue USING btree (message_id);
 
 
 --
 -- Name: idx_message_grouping_queue_phone_number_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_message_grouping_queue_phone_number_id ON public.message_grouping_queue USING btree (phone_number_id);
+CREATE INDEX IF NOT EXISTS idx_message_grouping_queue_phone_number_id ON public.message_grouping_queue USING btree (phone_number_id);
 
 
 --
 -- Name: idx_message_grouping_queue_processed; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_message_grouping_queue_processed ON public.message_grouping_queue USING btree (processed);
+CREATE INDEX IF NOT EXISTS idx_message_grouping_queue_processed ON public.message_grouping_queue USING btree (processed);
 
 
 --
 -- Name: idx_message_grouping_ready; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_message_grouping_ready ON public.message_grouping_queue USING btree (process_after, processed) WHERE (processed = false);
+CREATE INDEX IF NOT EXISTS idx_message_grouping_ready ON public.message_grouping_queue USING btree (process_after, processed) WHERE (processed = false);
 
 
 --
 -- Name: idx_message_processing_queue_priority; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_message_processing_queue_priority ON public.message_processing_queue USING btree (priority DESC);
+CREATE INDEX IF NOT EXISTS idx_message_processing_queue_priority ON public.message_processing_queue USING btree (priority DESC);
 
 
 --
 -- Name: idx_message_processing_queue_scheduled_for; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_message_processing_queue_scheduled_for ON public.message_processing_queue USING btree (scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_message_processing_queue_scheduled_for ON public.message_processing_queue USING btree (scheduled_for);
 
 
 --
 -- Name: idx_message_processing_queue_status; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_message_processing_queue_status ON public.message_processing_queue USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_message_processing_queue_status ON public.message_processing_queue USING btree (status);
 
 
 --
 -- Name: idx_messages_conversation_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_messages_conversation_id ON public.messages USING btree (conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON public.messages USING btree (conversation_id);
 
 
 --
 -- Name: idx_messages_created_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_messages_created_at ON public.messages USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON public.messages USING btree (created_at DESC);
 
 
 --
 -- Name: idx_messages_from_type; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_messages_from_type ON public.messages USING btree (from_type);
+CREATE INDEX IF NOT EXISTS idx_messages_from_type ON public.messages USING btree (from_type);
 
 
 --
 -- Name: idx_messages_sent_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_messages_sent_at ON public.messages USING btree (sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON public.messages USING btree (sent_at DESC);
 
 
 --
 -- Name: idx_messages_status; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_messages_status ON public.messages USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_messages_status ON public.messages USING btree (status);
 
 
 --
 -- Name: idx_messages_whatsapp_message_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_messages_whatsapp_message_id ON public.messages USING btree (whatsapp_message_id);
+CREATE INDEX IF NOT EXISTS idx_messages_whatsapp_message_id ON public.messages USING btree (whatsapp_message_id);
 
 
 --
 -- Name: idx_nina_processing_queue_conversation_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_nina_processing_queue_conversation_id ON public.nina_processing_queue USING btree (conversation_id);
+CREATE INDEX IF NOT EXISTS idx_nina_processing_queue_conversation_id ON public.nina_processing_queue USING btree (conversation_id);
 
 
 --
 -- Name: idx_nina_processing_queue_message_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_nina_processing_queue_message_id ON public.nina_processing_queue USING btree (message_id);
+CREATE INDEX IF NOT EXISTS idx_nina_processing_queue_message_id ON public.nina_processing_queue USING btree (message_id);
 
 
 --
 -- Name: idx_nina_processing_queue_priority; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_nina_processing_queue_priority ON public.nina_processing_queue USING btree (priority DESC);
+CREATE INDEX IF NOT EXISTS idx_nina_processing_queue_priority ON public.nina_processing_queue USING btree (priority DESC);
 
 
 --
 -- Name: idx_nina_processing_queue_scheduled_for; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_nina_processing_queue_scheduled_for ON public.nina_processing_queue USING btree (scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_nina_processing_queue_scheduled_for ON public.nina_processing_queue USING btree (scheduled_for);
 
 
 --
 -- Name: idx_nina_processing_queue_status; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_nina_processing_queue_status ON public.nina_processing_queue USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_nina_processing_queue_status ON public.nina_processing_queue USING btree (status);
 
 
 --
 -- Name: idx_nina_settings_is_active; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_nina_settings_is_active ON public.nina_settings USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_nina_settings_is_active ON public.nina_settings USING btree (is_active);
 
 
 --
 -- Name: idx_pipeline_stages_is_active; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_pipeline_stages_is_active ON public.pipeline_stages USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_pipeline_stages_is_active ON public.pipeline_stages USING btree (is_active);
 
 
 --
 -- Name: idx_pipeline_stages_position; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_pipeline_stages_position ON public.pipeline_stages USING btree ("position");
+CREATE INDEX IF NOT EXISTS idx_pipeline_stages_position ON public.pipeline_stages USING btree ("position");
 
 
 --
 -- Name: idx_send_queue_contact_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_send_queue_contact_id ON public.send_queue USING btree (contact_id);
+CREATE INDEX IF NOT EXISTS idx_send_queue_contact_id ON public.send_queue USING btree (contact_id);
 
 
 --
 -- Name: idx_send_queue_conversation_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_send_queue_conversation_id ON public.send_queue USING btree (conversation_id);
+CREATE INDEX IF NOT EXISTS idx_send_queue_conversation_id ON public.send_queue USING btree (conversation_id);
 
 
 --
 -- Name: idx_send_queue_priority; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_send_queue_priority ON public.send_queue USING btree (priority DESC);
+CREATE INDEX IF NOT EXISTS idx_send_queue_priority ON public.send_queue USING btree (priority DESC);
 
 
 --
 -- Name: idx_send_queue_scheduled_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_send_queue_scheduled_at ON public.send_queue USING btree (scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_send_queue_scheduled_at ON public.send_queue USING btree (scheduled_at);
 
 
 --
 -- Name: idx_send_queue_status; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_send_queue_status ON public.send_queue USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_send_queue_status ON public.send_queue USING btree (status);
 
 
 --
 -- Name: idx_tag_definitions_category; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_tag_definitions_category ON public.tag_definitions USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_tag_definitions_category ON public.tag_definitions USING btree (category);
 
 
 --
 -- Name: idx_tag_definitions_key; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_tag_definitions_key ON public.tag_definitions USING btree (key);
+CREATE INDEX IF NOT EXISTS idx_tag_definitions_key ON public.tag_definitions USING btree (key);
 
 
 --
 -- Name: messages_whatsapp_message_id_unique; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX messages_whatsapp_message_id_unique ON public.messages USING btree (whatsapp_message_id) WHERE (whatsapp_message_id IS NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS messages_whatsapp_message_id_unique ON public.messages USING btree (whatsapp_message_id) WHERE (whatsapp_message_id IS NOT NULL);
 
 
 --
 -- Name: contacts auto_create_deal_on_contact; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS auto_create_deal_on_contact ON public.contacts;
 CREATE TRIGGER auto_create_deal_on_contact AFTER INSERT ON public.contacts FOR EACH ROW EXECUTE FUNCTION public.create_deal_for_new_contact();
 
 
@@ -1515,6 +1566,7 @@ CREATE TRIGGER auto_create_deal_on_contact AFTER INSERT ON public.contacts FOR E
 -- Name: appointments update_appointments_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_appointments_updated_at ON public.appointments;
 CREATE TRIGGER update_appointments_updated_at BEFORE UPDATE ON public.appointments FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1522,6 +1574,7 @@ CREATE TRIGGER update_appointments_updated_at BEFORE UPDATE ON public.appointmen
 -- Name: contacts update_contacts_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_contacts_updated_at ON public.contacts;
 CREATE TRIGGER update_contacts_updated_at BEFORE UPDATE ON public.contacts FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1529,6 +1582,7 @@ CREATE TRIGGER update_contacts_updated_at BEFORE UPDATE ON public.contacts FOR E
 -- Name: messages update_conversation_last_message_trigger; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_conversation_last_message_trigger ON public.messages;
 CREATE TRIGGER update_conversation_last_message_trigger AFTER INSERT ON public.messages FOR EACH ROW EXECUTE FUNCTION public.update_conversation_last_message();
 
 
@@ -1536,6 +1590,7 @@ CREATE TRIGGER update_conversation_last_message_trigger AFTER INSERT ON public.m
 -- Name: conversation_states update_conversation_states_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_conversation_states_updated_at ON public.conversation_states;
 CREATE TRIGGER update_conversation_states_updated_at BEFORE UPDATE ON public.conversation_states FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1543,6 +1598,7 @@ CREATE TRIGGER update_conversation_states_updated_at BEFORE UPDATE ON public.con
 -- Name: conversations update_conversations_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_conversations_updated_at ON public.conversations;
 CREATE TRIGGER update_conversations_updated_at BEFORE UPDATE ON public.conversations FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1550,6 +1606,7 @@ CREATE TRIGGER update_conversations_updated_at BEFORE UPDATE ON public.conversat
 -- Name: deal_activities update_deal_activities_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_deal_activities_updated_at ON public.deal_activities;
 CREATE TRIGGER update_deal_activities_updated_at BEFORE UPDATE ON public.deal_activities FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1557,6 +1614,7 @@ CREATE TRIGGER update_deal_activities_updated_at BEFORE UPDATE ON public.deal_ac
 -- Name: deals update_deals_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_deals_updated_at ON public.deals;
 CREATE TRIGGER update_deals_updated_at BEFORE UPDATE ON public.deals FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1564,6 +1622,7 @@ CREATE TRIGGER update_deals_updated_at BEFORE UPDATE ON public.deals FOR EACH RO
 -- Name: message_processing_queue update_message_processing_queue_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_message_processing_queue_updated_at ON public.message_processing_queue;
 CREATE TRIGGER update_message_processing_queue_updated_at BEFORE UPDATE ON public.message_processing_queue FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1571,6 +1630,7 @@ CREATE TRIGGER update_message_processing_queue_updated_at BEFORE UPDATE ON publi
 -- Name: nina_processing_queue update_nina_processing_queue_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_nina_processing_queue_updated_at ON public.nina_processing_queue;
 CREATE TRIGGER update_nina_processing_queue_updated_at BEFORE UPDATE ON public.nina_processing_queue FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1578,6 +1638,7 @@ CREATE TRIGGER update_nina_processing_queue_updated_at BEFORE UPDATE ON public.n
 -- Name: nina_settings update_nina_settings_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_nina_settings_updated_at ON public.nina_settings;
 CREATE TRIGGER update_nina_settings_updated_at BEFORE UPDATE ON public.nina_settings FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1585,6 +1646,7 @@ CREATE TRIGGER update_nina_settings_updated_at BEFORE UPDATE ON public.nina_sett
 -- Name: pipeline_stages update_pipeline_stages_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_pipeline_stages_updated_at ON public.pipeline_stages;
 CREATE TRIGGER update_pipeline_stages_updated_at BEFORE UPDATE ON public.pipeline_stages FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1592,6 +1654,7 @@ CREATE TRIGGER update_pipeline_stages_updated_at BEFORE UPDATE ON public.pipelin
 -- Name: profiles update_profiles_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1599,6 +1662,7 @@ CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR E
 -- Name: send_queue update_send_queue_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_send_queue_updated_at ON public.send_queue;
 CREATE TRIGGER update_send_queue_updated_at BEFORE UPDATE ON public.send_queue FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1606,6 +1670,7 @@ CREATE TRIGGER update_send_queue_updated_at BEFORE UPDATE ON public.send_queue F
 -- Name: tag_definitions update_tag_definitions_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_tag_definitions_updated_at ON public.tag_definitions;
 CREATE TRIGGER update_tag_definitions_updated_at BEFORE UPDATE ON public.tag_definitions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1613,6 +1678,7 @@ CREATE TRIGGER update_tag_definitions_updated_at BEFORE UPDATE ON public.tag_def
 -- Name: team_functions update_team_functions_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_team_functions_updated_at ON public.team_functions;
 CREATE TRIGGER update_team_functions_updated_at BEFORE UPDATE ON public.team_functions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1620,6 +1686,7 @@ CREATE TRIGGER update_team_functions_updated_at BEFORE UPDATE ON public.team_fun
 -- Name: team_members update_team_members_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_team_members_updated_at ON public.team_members;
 CREATE TRIGGER update_team_members_updated_at BEFORE UPDATE ON public.team_members FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1627,6 +1694,7 @@ CREATE TRIGGER update_team_members_updated_at BEFORE UPDATE ON public.team_membe
 -- Name: teams update_teams_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
+DROP TRIGGER IF EXISTS update_teams_updated_at ON public.teams;
 CREATE TRIGGER update_teams_updated_at BEFORE UPDATE ON public.teams FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
@@ -1842,204 +1910,400 @@ ALTER TABLE ONLY public.user_roles
 -- Name: user_roles Admins can manage all roles; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins can manage all roles" ON public.user_roles USING (public.has_role(auth.uid(), 'admin'::public.app_role));
+DO $$
+BEGIN
+  CREATE POLICY "Admins can manage all roles" ON public.user_roles USING (public.has_role(auth.uid(), 'admin'::public.app_role));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: nina_settings Admins can modify nina_settings; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins can modify nina_settings" ON public.nina_settings TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify nina_settings" ON public.nina_settings TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: pipeline_stages Admins can modify pipeline_stages; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins can modify pipeline_stages" ON public.pipeline_stages TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify pipeline_stages" ON public.pipeline_stages TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: tag_definitions Admins can modify tag_definitions; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins can modify tag_definitions" ON public.tag_definitions TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify tag_definitions" ON public.tag_definitions TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: team_functions Admins can modify team_functions; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins can modify team_functions" ON public.team_functions TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify team_functions" ON public.team_functions TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: team_members Admins can modify team_members; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins can modify team_members" ON public.team_members TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify team_members" ON public.team_members TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: teams Admins can modify teams; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins can modify teams" ON public.teams TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify teams" ON public.teams TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role)) WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: message_grouping_queue Allow all operations on message_grouping_queue; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all operations on message_grouping_queue" ON public.message_grouping_queue USING (true) WITH CHECK (true);
+DO $$
+BEGIN
+  CREATE POLICY "Allow all operations on message_grouping_queue" ON public.message_grouping_queue USING (true) WITH CHECK (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: message_processing_queue Allow all operations on message_processing_queue; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all operations on message_processing_queue" ON public.message_processing_queue USING (true) WITH CHECK (true);
+DO $$
+BEGIN
+  CREATE POLICY "Allow all operations on message_processing_queue" ON public.message_processing_queue USING (true) WITH CHECK (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: nina_processing_queue Allow all operations on nina_processing_queue; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all operations on nina_processing_queue" ON public.nina_processing_queue USING (true) WITH CHECK (true);
+DO $$
+BEGIN
+  CREATE POLICY "Allow all operations on nina_processing_queue" ON public.nina_processing_queue USING (true) WITH CHECK (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: send_queue Allow all operations on send_queue; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all operations on send_queue" ON public.send_queue USING (true) WITH CHECK (true);
+DO $$
+BEGIN
+  CREATE POLICY "Allow all operations on send_queue" ON public.send_queue USING (true) WITH CHECK (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: nina_settings Authenticated can read nina_settings; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Authenticated can read nina_settings" ON public.nina_settings FOR SELECT TO authenticated USING (true);
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read nina_settings" ON public.nina_settings FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: pipeline_stages Authenticated can read pipeline_stages; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Authenticated can read pipeline_stages" ON public.pipeline_stages FOR SELECT TO authenticated USING (true);
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read pipeline_stages" ON public.pipeline_stages FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: tag_definitions Authenticated can read tag_definitions; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Authenticated can read tag_definitions" ON public.tag_definitions FOR SELECT TO authenticated USING (true);
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read tag_definitions" ON public.tag_definitions FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: team_functions Authenticated can read team_functions; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Authenticated can read team_functions" ON public.team_functions FOR SELECT TO authenticated USING (true);
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read team_functions" ON public.team_functions FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: team_members Authenticated can read team_members; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Authenticated can read team_members" ON public.team_members FOR SELECT TO authenticated USING (true);
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read team_members" ON public.team_members FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: teams Authenticated can read teams; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Authenticated can read teams" ON public.teams FOR SELECT TO authenticated USING (true);
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read teams" ON public.teams FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: contacts Authenticated users can access all contacts; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Authenticated users can access all contacts" ON public.contacts USING ((auth.role() = 'authenticated'::text)) WITH CHECK ((auth.role() = 'authenticated'::text));
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated users can access all contacts" ON public.contacts USING ((auth.role() = 'authenticated'::text)) WITH CHECK ((auth.role() = 'authenticated'::text));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: conversations Authenticated users can access all conversations; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Authenticated users can access all conversations" ON public.conversations USING ((auth.role() = 'authenticated'::text)) WITH CHECK ((auth.role() = 'authenticated'::text));
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated users can access all conversations" ON public.conversations USING ((auth.role() = 'authenticated'::text)) WITH CHECK ((auth.role() = 'authenticated'::text));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: messages Authenticated users can access all messages; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Authenticated users can access all messages" ON public.messages USING ((auth.role() = 'authenticated'::text)) WITH CHECK ((auth.role() = 'authenticated'::text));
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated users can access all messages" ON public.messages USING ((auth.role() = 'authenticated'::text)) WITH CHECK ((auth.role() = 'authenticated'::text));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: deal_activities Users can access activities of their deals; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can access activities of their deals" ON public.deal_activities USING ((EXISTS ( SELECT 1
-   FROM public.deals
-  WHERE ((deals.id = deal_activities.deal_id) AND (deals.user_id = auth.uid()))))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.deals
-  WHERE ((deals.id = deal_activities.deal_id) AND (deals.user_id = auth.uid())))));
+DO $$
+BEGIN
+  CREATE POLICY "Users can access activities of their deals" ON public.deal_activities USING ((EXISTS ( SELECT 1
+     FROM public.deals
+    WHERE ((deals.id = deal_activities.deal_id) AND (deals.user_id = auth.uid()))))) WITH CHECK ((EXISTS ( SELECT 1
+     FROM public.deals
+    WHERE ((deals.id = deal_activities.deal_id) AND (deals.user_id = auth.uid())))));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: conversation_states Users can access states of their conversations; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can access states of their conversations" ON public.conversation_states USING ((EXISTS ( SELECT 1
-   FROM public.conversations
-  WHERE ((conversations.id = conversation_states.conversation_id) AND (conversations.user_id = auth.uid()))))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.conversations
-  WHERE ((conversations.id = conversation_states.conversation_id) AND (conversations.user_id = auth.uid())))));
+DO $$
+BEGIN
+  CREATE POLICY "Users can access states of their conversations" ON public.conversation_states USING ((EXISTS ( SELECT 1
+     FROM public.conversations
+    WHERE ((conversations.id = conversation_states.conversation_id) AND (conversations.user_id = auth.uid()))))) WITH CHECK ((EXISTS ( SELECT 1
+     FROM public.conversations
+    WHERE ((conversations.id = conversation_states.conversation_id) AND (conversations.user_id = auth.uid())))));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: profiles Users can insert own profile; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK ((auth.uid() = user_id));
+DO $$
+BEGIN
+  CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK ((auth.uid() = user_id));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: appointments Users can manage own appointments; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can manage own appointments" ON public.appointments USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+DO $$
+BEGIN
+  CREATE POLICY "Users can manage own appointments" ON public.appointments USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: deals Users can manage own deals; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can manage own deals" ON public.deals USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+DO $$
+BEGIN
+  CREATE POLICY "Users can manage own deals" ON public.deals USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: profiles Users can update own profile; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING ((auth.uid() = user_id));
+DO $$
+BEGIN
+  CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING ((auth.uid() = user_id));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: profiles Users can view own profile; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING ((auth.uid() = user_id));
+DO $$
+BEGIN
+  CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING ((auth.uid() = user_id));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --
 -- Name: user_roles Users can view own roles; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can view own roles" ON public.user_roles FOR SELECT USING ((auth.uid() = user_id));
+DO $$
+BEGIN
+  CREATE POLICY "Users can view own roles" ON public.user_roles FOR SELECT USING ((auth.uid() = user_id));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 
 --

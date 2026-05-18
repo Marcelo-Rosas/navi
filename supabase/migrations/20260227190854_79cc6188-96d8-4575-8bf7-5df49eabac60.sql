@@ -1,34 +1,45 @@
 
-CREATE OR REPLACE FUNCTION public.match_knowledge_chunks(
-  query_embedding vector(384),
-  match_threshold FLOAT DEFAULT 0.7,
-  match_count INT DEFAULT 5
-)
-RETURNS TABLE (
-  id UUID,
-  file_id UUID,
-  content TEXT,
-  chunk_index INT,
-  metadata JSONB,
-  similarity FLOAT
-)
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path = 'public, extensions'
-AS $$
+DO $$
 BEGIN
-  RETURN QUERY
-  SELECT
-    kc.id,
-    kc.file_id,
-    kc.content,
-    kc.chunk_index,
-    kc.metadata,
-    (1 - (kc.embedding <=> query_embedding))::FLOAT AS similarity
-  FROM public.knowledge_chunks kc
-  WHERE (1 - (kc.embedding <=> query_embedding))::FLOAT > match_threshold
-  ORDER BY kc.embedding <=> query_embedding
-  LIMIT match_count;
-END;
-$$;
+  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') THEN
+    EXECUTE $fn$
+      CREATE OR REPLACE FUNCTION public.match_knowledge_chunks(
+        query_embedding vector(384),
+        match_threshold FLOAT DEFAULT 0.7,
+        match_count INT DEFAULT 5
+      )
+      RETURNS TABLE (
+        id UUID,
+        file_id UUID,
+        content TEXT,
+        chunk_index INT,
+        metadata JSONB,
+        similarity FLOAT
+      )
+      LANGUAGE plpgsql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = 'public, extensions'
+      AS $body$
+      BEGIN
+        RETURN QUERY
+        SELECT
+          kc.id,
+          kc.file_id,
+          kc.content,
+          kc.chunk_index,
+          kc.metadata,
+          (1 - (kc.embedding <=> query_embedding))::FLOAT AS similarity
+        FROM public.knowledge_chunks kc
+        WHERE (1 - (kc.embedding <=> query_embedding))::FLOAT > match_threshold
+        ORDER BY kc.embedding <=> query_embedding
+        LIMIT match_count;
+      END;
+      $body$;
+    $fn$;
+  END IF;
+EXCEPTION
+  WHEN undefined_table THEN null;
+  WHEN undefined_column THEN null;
+  WHEN insufficient_privilege THEN null;
+END $$;

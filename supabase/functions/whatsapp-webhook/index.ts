@@ -57,7 +57,11 @@ function extractInboundText(message: Record<string, unknown>): string | null {
  * nina-orchestrator (LLM via Groq) reconhece e dispara buscar_cotacao
  * imediatamente sem precisar perguntar nada ao cliente.
  *
- * Schema do Flow QUOTATION_FORM (4 campos): origem, destino, peso_kg, cargo_value.
+ * Schema do Flow QUOTATION_FORM publicado no Meta Manager (v7.3):
+ * 4 campos — origem, destino, peso, valor_declarado.
+ *
+ * Aceita também alias antigo (peso_kg, cargo_value) caso versão pré-publish
+ * alguma vez seja usada — backward-compat zero-custo.
  */
 function formatNfmReply(
   nfm?: { name?: string; body?: string; response_json?: string },
@@ -71,11 +75,11 @@ function formatNfmReply(
     return null;
   }
 
-  // Cotação flow — campos esperados
+  // Cotação flow — nomes do Meta v7.3 com fallback pros nomes antigos
   const origem = String(data.origem ?? "").trim();
   const destino = String(data.destino ?? "").trim();
-  const peso = String(data.peso_kg ?? "").trim();
-  const valor = String(data.cargo_value ?? "").trim();
+  const peso = String(data.peso ?? data.peso_kg ?? "").trim();
+  const valor = String(data.valor_declarado ?? data.cargo_value ?? "").trim();
 
   if (origem && destino && peso && valor) {
     return [

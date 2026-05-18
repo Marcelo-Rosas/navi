@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get user_id from auth token for multi-tenant filtering
@@ -36,20 +36,20 @@ Deno.serve(async (req) => {
 
     const results: HealthCheckResult[] = [];
 
-    // 1. Check LOVABLE_API_KEY
-    console.log('[health-check] Checking LOVABLE_API_KEY...');
-    if (lovableApiKey && lovableApiKey.length > 10) {
+    // 1. Check GEMINI_API_KEY
+    console.log('[health-check] Checking GEMINI_API_KEY...');
+    if (geminiApiKey && geminiApiKey.length > 10) {
       results.push({
-        component: 'lovable_api_key',
+        component: 'ai_backend_key',
         status: 'ok',
-        message: 'LOVABLE_API_KEY está configurada',
+        message: 'GEMINI_API_KEY está configurada',
         details: { configured: true },
       });
     } else {
       results.push({
-        component: 'lovable_api_key',
+        component: 'ai_backend_key',
         status: 'error',
-        message: 'LOVABLE_API_KEY não está configurada. A IA não funcionará.',
+        message: 'GEMINI_API_KEY não está configurada. A IA não funcionará.',
         details: { configured: false },
       });
     }

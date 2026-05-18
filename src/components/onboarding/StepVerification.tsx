@@ -50,7 +50,7 @@ const itemVariants = {
 };
 
 const componentIcons: Record<string, React.ReactNode> = {
-  lovable_api_key: <Shield className="w-5 h-5" />,
+  ai_backend_key: <Shield className="w-5 h-5" />,
   whatsapp: <MessageSquare className="w-5 h-5" />,
   identity: <Building2 className="w-5 h-5" />,
   agent_prompt: <Bot className="w-5 h-5" />,
@@ -63,7 +63,7 @@ const componentIcons: Record<string, React.ReactNode> = {
 };
 
 const componentLabels: Record<string, string> = {
-  lovable_api_key: 'Chave de IA',
+  ai_backend_key: 'Chave do Backend de IA',
   whatsapp: 'WhatsApp (Evolution API)',
   identity: 'Identidade da Empresa',
   agent_prompt: 'Prompt do Agente',
@@ -104,7 +104,7 @@ export const StepVerification: React.FC<StepVerificationProps> = ({ onAllChecked
         
         // Check if critical components are OK
         const criticalOk = data.results
-          .filter(r => ['lovable_api_key', 'nina_settings', 'pipeline_stages'].includes(r.component))
+          .filter(r => ['ai_backend_key', 'nina_settings', 'pipeline_stages'].includes(r.component))
           .every(r => r.status !== 'error');
         
         onAllChecked(criticalOk);
@@ -192,7 +192,7 @@ export const StepVerification: React.FC<StepVerificationProps> = ({ onAllChecked
 
   // Group results by category
   const criticalResults = results.filter(r => 
-    ['lovable_api_key', 'nina_settings', 'pipeline_stages'].includes(r.component)
+    ['ai_backend_key', 'nina_settings', 'pipeline_stages'].includes(r.component)
   );
   const configResults = results.filter(r => 
     ['whatsapp', 'identity', 'agent_prompt'].includes(r.component)

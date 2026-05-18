@@ -27,37 +27,9 @@ serve(async (req) => {
       });
     }
 
-    const normalizeEvolutionUrl = (rawUrl: string): string => {
-      let normalized = rawUrl.trim();
+    const baseUrl = api_url.replace(/\/$/, '');
 
-      // Remove protocolos repetidos/malformados no início (ex: http://https//dominio)
-      const protocol = /^http:\/\/(?!https?:?\/\/)/i.test(normalized) ? 'http://' : 'https://';
-      normalized = normalized.replace(/^(?:https?:?\/\/)+/i, '');
-
-      normalized = `${protocol}${normalized}`.replace(/\/+$/, '');
-
-      const parsed = new URL(normalized);
-      if (!parsed.hostname) {
-        throw new Error('Missing hostname');
-      }
-
-      return parsed.toString().replace(/\/+$/, '');
-    };
-
-    let baseUrl: string;
-    try {
-      baseUrl = normalizeEvolutionUrl(api_url);
-    } catch {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'URL da Evolution inválida. Use algo como https://seu-dominio.com',
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // 1. Criar a instância na Evolution API
+    // 1. Criar a inst├óncia na Evolution API
     console.log(`[create-evolution-instance] Creating instance: ${instance_name} at ${baseUrl}`);
     const createRes = await fetch(`${baseUrl}/instance/create`, {
       method: 'POST',
@@ -83,7 +55,7 @@ serve(async (req) => {
     if (!createRes.ok && createRes.status !== 200 && createRes.status !== 201) {
       return new Response(JSON.stringify({
         success: false,
-        error: `Erro ao criar instância na Evolution API: ${createRes.status}`,
+        error: `Erro ao criar inst├óncia na Evolution API: ${createRes.status}`,
         details: createText,
       }), {
         status: 400,
@@ -94,7 +66,7 @@ serve(async (req) => {
     // 2. Buscar QR Code
     let qrCode: string | null = null;
 
-    // Tenta extrair QR do retorno da criação
+    // Tenta extrair QR do retorno da cria├º├úo
     qrCode = createData?.qrcode?.base64 || createData?.hash?.qrcode || null;
 
     if (!qrCode) {
@@ -144,7 +116,7 @@ serve(async (req) => {
       .from('whatsapp_instance_secrets')
       .insert({
         instance_id: instance.id,
-        api_url: baseUrl,
+        api_url,
         api_key,
       });
 

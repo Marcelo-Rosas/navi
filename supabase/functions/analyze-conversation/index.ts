@@ -1,12 +1,56 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI } from "../nina-orchestrator/_shared/ai.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+function toGeminiType(type?: string) {
+  if (!type) return type;
+  switch (String(type).toLowerCase()) {
+    case 'object':
+      return 'OBJECT';
+    case 'array':
+      return 'ARRAY';
+    case 'string':
+      return 'STRING';
+    case 'number':
+    case 'integer':
+      return 'NUMBER';
+    case 'boolean':
+      return 'BOOLEAN';
+    default:
+      return type;
+  }
+}
+
+function convertSchema(schema: any): any {
+  if (Array.isArray(schema)) return schema.map(convertSchema);
+  if (!schema || typeof schema !== 'object') return schema;
+
+  const next: Record<string, any> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === 'type' && typeof value === 'string') {
+      next.type = toGeminiType(value);
+      continue;
+    }
+
+    if (key === 'properties' && value && typeof value === 'object') {
+      const convertedProps: Record<string, any> = {};
+      for (const [propKey, propValue] of Object.entries(value)) {
+        convertedProps[propKey] = convertSchema(propValue);
+      }
+      next.properties = convertedProps;
+      continue;
+    }
+
+    next[key] = convertSchema(value);
+  }
+
+  return next;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -15,7 +59,7 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
+  const geminiApiKey = Deno.env.get('GEMINI_API_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
@@ -200,30 +244,21 @@ ESTÁGIO ATUAL DO DEAL: ${currentDeal?.stage || 'Sem estágio'}` : ''}
 2. Determine para qual estágio do pipeline o deal deve ir com base nos critérios fornecidos`
       : `Você é um analista de conversas de vendas. Analise a interação e extraia insights estruturados para atualizar a memória do cliente.`;
 
-    // Call AI to extract insights AND determine deal stage (if applicable)
-    const analysisResponse = await fetch(LOVABLE_AI_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: conversationSnippet }
-        ],
-        tools: tools
-      })
-    });
+    const functionDeclarations = tools.map((tool: any) => ({
+      name: tool.function?.name,
+      description: tool.function?.description,
+      parameters: convertSchema(tool.function?.parameters),
+    }));
 
-    if (!analysisResponse.ok) {
-      console.error('[Analyze] AI analysis failed:', analysisResponse.status);
-      throw new Error('AI analysis failed');
-    }
+    const aiResult = await callAI(
+      geminiApiKey,
+      [{ role: 'user', parts: [{ text: conversationSnippet }] }],
+      systemPrompt,
+      functionDeclarations.length ? [{ functionDeclarations }] : [],
+      2048
+    );
 
-    const analysisData = await analysisResponse.json();
-    const toolCalls = analysisData.choices?.[0]?.message?.tool_calls || [];
+    const toolCalls = aiResult?.toolCalls ?? [];
     
     if (toolCalls.length === 0) {
       console.error('[Analyze] No tool calls in AI response');
@@ -235,10 +270,14 @@ ESTÁGIO ATUAL DO DEAL: ${currentDeal?.stage || 'Sem estágio'}` : ''}
     let stageResult = null;
 
     for (const toolCall of toolCalls) {
-      if (toolCall.function?.name === 'update_memory_insights') {
-        insights = JSON.parse(toolCall.function.arguments);
-      } else if (toolCall.function?.name === 'determine_deal_stage') {
-        stageResult = JSON.parse(toolCall.function.arguments);
+      const fnName = toolCall.name ?? toolCall.function?.name;
+      const rawArgs = toolCall.args ?? toolCall.function?.arguments ?? {};
+      const parsedArgs = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs;
+
+      if (fnName === 'update_memory_insights') {
+        insights = parsedArgs;
+      } else if (fnName === 'determine_deal_stage') {
+        stageResult = parsedArgs;
       }
     }
 

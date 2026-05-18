@@ -28,6 +28,12 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Silencia avisos de migração v7 e evita novo objeto a cada render */
+const ROUTER_FUTURE_FLAGS = {
+  v7_relativeSplatPath: true,
+  v7_startTransition: true,
+} as const;
+
 // Componente de Layout que envolve a aplicação principal
 const AppLayout: React.FC = () => {
   return (
@@ -53,7 +59,7 @@ const AppLayout: React.FC = () => {
 const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter future={ROUTER_FUTURE_FLAGS}>
         <AuthProvider>
           <CompanySettingsProvider>
             <DesignSettingsProvider>

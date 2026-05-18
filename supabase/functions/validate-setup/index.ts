@@ -83,8 +83,8 @@ serve(async (req) => {
       results.push({
         component: 'nina_settings',
         status: 'error',
-        message: 'Configurações não encontradas',
-        details: 'Execute a inicialização do sistema',
+        message: 'Configura├º├Áes n├úo encontradas',
+        details: 'Execute a inicializa├º├úo do sistema',
       });
     } else {
       // Check identity
@@ -98,7 +98,7 @@ serve(async (req) => {
         results.push({
           component: 'identity',
           status: 'warning',
-          message: 'Identidade não configurada',
+          message: 'Identidade n├úo configurada',
           details: 'Configure nome da empresa e SDR',
         });
       }
@@ -128,21 +128,21 @@ serve(async (req) => {
               results.push({
                 component: 'whatsapp',
                 status: 'ok',
-                message: `Evolution API conectada: ${connectedInstances[0].name || 'Instância ativa'}`,
+                message: `Evolution API conectada: ${connectedInstances[0].name || 'Inst├óncia ativa'}`,
               });
             } else {
               results.push({
                 component: 'whatsapp',
                 status: 'warning',
-                message: 'Evolution API acessível, mas nenhuma instância conectada',
-                details: 'Conecte uma instância via QR Code',
+                message: 'Evolution API acess├¡vel, mas nenhuma inst├óncia conectada',
+                details: 'Conecte uma inst├óncia via QR Code',
               });
             }
           } else {
             results.push({
               component: 'whatsapp',
               status: 'error',
-              message: 'Credenciais da Evolution API inválidas',
+              message: 'Credenciais da Evolution API inv├ílidas',
               details: 'Verifique URL e API Key',
             });
           }
@@ -150,15 +150,15 @@ serve(async (req) => {
           results.push({
             component: 'whatsapp',
             status: 'warning',
-            message: 'Não foi possível validar Evolution API',
-            details: 'Erro de conexão com a API',
+            message: 'N├úo foi poss├¡vel validar Evolution API',
+            details: 'Erro de conex├úo com a API',
           });
         }
       } else {
         results.push({
           component: 'whatsapp',
           status: 'error',
-          message: 'Evolution API não configurada',
+          message: 'Evolution API n├úo configurada',
           details: 'Configure a URL e API Key da Evolution',
         });
       }
@@ -174,7 +174,7 @@ serve(async (req) => {
         results.push({
           component: 'agent_prompt',
           status: 'warning',
-          message: 'Prompt do agente não personalizado',
+          message: 'Prompt do agente n├úo personalizado',
           details: 'Recomendamos configurar um prompt personalizado',
         });
       }
@@ -196,22 +196,22 @@ serve(async (req) => {
             results.push({
               component: 'elevenlabs',
               status: 'error',
-              message: 'API Key do ElevenLabs inválida',
+              message: 'API Key do ElevenLabs inv├ílida',
             });
           }
         } catch (e) {
           results.push({
             component: 'elevenlabs',
             status: 'warning',
-            message: 'Não foi possível validar ElevenLabs',
+            message: 'N├úo foi poss├¡vel validar ElevenLabs',
           });
         }
       } else {
         results.push({
           component: 'elevenlabs',
           status: 'warning',
-          message: 'ElevenLabs não configurado (opcional)',
-          details: 'Respostas em áudio não estarão disponíveis',
+          message: 'ElevenLabs n├úo configurado (opcional)',
+          details: 'Respostas em ├íudio n├úo estar├úo dispon├¡veis',
         });
       }
 
@@ -220,13 +220,13 @@ serve(async (req) => {
         results.push({
           component: 'business_hours',
           status: 'ok',
-          message: `Horário: ${settings.business_hours_start} - ${settings.business_hours_end}`,
+          message: `Hor├írio: ${settings.business_hours_start} - ${settings.business_hours_end}`,
         });
       } else {
         results.push({
           component: 'business_hours',
           status: 'warning',
-          message: 'Horário comercial não configurado',
+          message: 'Hor├írio comercial n├úo configurado',
         });
       }
     }
@@ -243,8 +243,8 @@ serve(async (req) => {
       results.push({
         component: 'lovable_ai',
         status: 'error',
-        message: 'LOVABLE_API_KEY não configurada',
-        details: 'A IA não funcionará sem esta chave',
+        message: 'LOVABLE_API_KEY n├úo configurada',
+        details: 'A IA n├úo funcionar├í sem esta chave',
       });
     }
 
@@ -258,13 +258,13 @@ serve(async (req) => {
       results.push({
         component: 'pipeline',
         status: 'ok',
-        message: `${stagesCount} estágios no pipeline`,
+        message: `${stagesCount} est├ígios no pipeline`,
       });
     } else {
       results.push({
         component: 'pipeline',
         status: 'warning',
-        message: 'Pipeline não configurado',
+        message: 'Pipeline n├úo configurado',
       });
     }
 
@@ -294,7 +294,7 @@ serve(async (req) => {
       results.push({
         component: 'profile',
         status: 'warning',
-        message: 'Perfil não encontrado',
+        message: 'Perfil n├úo encontrado',
         details: profileError?.message,
       });
     }
@@ -317,10 +317,10 @@ serve(async (req) => {
         percentage: Math.round((okCount / totalCount) * 100),
       },
       message: overallStatus === 'ok' 
-        ? '✅ Tudo configurado corretamente!' 
+        ? 'Ô£à Tudo configurado corretamente!' 
         : overallStatus === 'warning'
-        ? '⚠️ Sistema funcional, mas há itens opcionais pendentes'
-        : '❌ Há configurações obrigatórias pendentes',
+        ? 'ÔÜá´©Å Sistema funcional, mas h├í itens opcionais pendentes'
+        : 'ÔØî H├í configura├º├Áes obrigat├│rias pendentes',
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

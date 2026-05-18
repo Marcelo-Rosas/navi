@@ -75,7 +75,6 @@ serve(async (req) => {
       settings = anySettings;
     }
 
-    const phoneNumberId = settings?.whatsapp_phone_number_id || 'test_phone_id';
 
     // Get or create contact (single-tenant - no user_id filter)
     const { data: existingContact } = await supabase

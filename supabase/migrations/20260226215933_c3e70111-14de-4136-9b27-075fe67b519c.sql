@@ -2,27 +2,87 @@
 -- =============================================
 -- ENUMS
 -- =============================================
-CREATE TYPE public.app_role AS ENUM ('admin', 'user');
-CREATE TYPE public.appointment_type AS ENUM ('demo', 'meeting', 'support', 'followup');
-CREATE TYPE public.conversation_status AS ENUM ('nina', 'human', 'paused');
-CREATE TYPE public.member_role AS ENUM ('admin', 'manager', 'agent');
-CREATE TYPE public.member_status AS ENUM ('active', 'invited', 'disabled');
-CREATE TYPE public.message_from AS ENUM ('user', 'nina', 'human');
-CREATE TYPE public.message_status AS ENUM ('sent', 'delivered', 'read', 'failed', 'processing');
-CREATE TYPE public.message_type AS ENUM ('text', 'audio', 'image', 'document', 'video');
-CREATE TYPE public.queue_status AS ENUM ('pending', 'processing', 'completed', 'failed');
-CREATE TYPE public.team_assignment AS ENUM ('mateus', 'igor', 'fe', 'vendas', 'suporte');
-CREATE TYPE whatsapp_provider_type AS ENUM ('official', 'evolution_self_hosted', 'evolution_cloud');
-CREATE TYPE whatsapp_instance_status AS ENUM ('connected', 'connecting', 'disconnected', 'qr_required');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
+    CREATE TYPE public.app_role AS ENUM ('admin', 'user');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'appointment_type') THEN
+    CREATE TYPE public.appointment_type AS ENUM ('demo', 'meeting', 'support', 'followup');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'conversation_status') THEN
+    CREATE TYPE public.conversation_status AS ENUM ('nina', 'human', 'paused');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'member_role') THEN
+    CREATE TYPE public.member_role AS ENUM ('admin', 'manager', 'agent');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'member_status') THEN
+    CREATE TYPE public.member_status AS ENUM ('active', 'invited', 'disabled');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_from') THEN
+    CREATE TYPE public.message_from AS ENUM ('user', 'nina', 'human');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_status') THEN
+    CREATE TYPE public.message_status AS ENUM ('sent', 'delivered', 'read', 'failed', 'processing');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_type') THEN
+    CREATE TYPE public.message_type AS ENUM ('text', 'audio', 'image', 'document', 'video');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'queue_status') THEN
+    CREATE TYPE public.queue_status AS ENUM ('pending', 'processing', 'completed', 'failed');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'team_assignment') THEN
+    CREATE TYPE public.team_assignment AS ENUM ('mateus', 'igor', 'fe', 'vendas', 'suporte');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'whatsapp_provider_type') THEN
+    CREATE TYPE whatsapp_provider_type AS ENUM ('official', 'evolution_self_hosted', 'evolution_cloud');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'whatsapp_instance_status') THEN
+    CREATE TYPE whatsapp_instance_status AS ENUM ('connected', 'connecting', 'disconnected', 'qr_required');
+  END IF;
+END $$;
 
 -- =============================================
 -- BASE FUNCTION (no table deps)
 -- =============================================
-CREATE FUNCTION public.update_updated_at_column() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.update_updated_at_column() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
     AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
 
-CREATE FUNCTION public.get_auth_user_id() RETURNS uuid
+CREATE OR REPLACE FUNCTION public.get_auth_user_id() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
     AS $$ SELECT auth.uid() $$;
 
@@ -30,7 +90,7 @@ CREATE FUNCTION public.get_auth_user_id() RETURNS uuid
 -- TABLES (ordered by dependencies)
 -- =============================================
 
-CREATE TABLE public.user_roles (
+CREATE TABLE IF NOT EXISTS public.user_roles (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     role public.app_role DEFAULT 'user' NOT NULL,
@@ -38,7 +98,7 @@ CREATE TABLE public.user_roles (
     UNIQUE (user_id, role)
 );
 
-CREATE TABLE public.profiles (
+CREATE TABLE IF NOT EXISTS public.profiles (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     user_id uuid NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name text,
@@ -49,7 +109,7 @@ CREATE TABLE public.profiles (
     updated_at timestamptz DEFAULT now() NOT NULL
 );
 
-CREATE TABLE public.contacts (
+CREATE TABLE IF NOT EXISTS public.contacts (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     phone_number text NOT NULL UNIQUE,
     whatsapp_id text,
@@ -72,7 +132,7 @@ CREATE TABLE public.contacts (
 );
 ALTER TABLE ONLY public.contacts REPLICA IDENTITY FULL;
 
-CREATE TABLE public.conversations (
+CREATE TABLE IF NOT EXISTS public.conversations (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     contact_id uuid NOT NULL REFERENCES public.contacts(id) ON DELETE CASCADE,
     status public.conversation_status DEFAULT 'nina' NOT NULL,
@@ -90,7 +150,7 @@ CREATE TABLE public.conversations (
 );
 ALTER TABLE ONLY public.conversations REPLICA IDENTITY FULL;
 
-CREATE TABLE public.messages (
+CREATE TABLE IF NOT EXISTS public.messages (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     conversation_id uuid NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
     reply_to_id uuid REFERENCES public.messages(id),
@@ -111,7 +171,7 @@ CREATE TABLE public.messages (
 );
 ALTER TABLE ONLY public.messages REPLICA IDENTITY FULL;
 
-CREATE TABLE public.conversation_states (
+CREATE TABLE IF NOT EXISTS public.conversation_states (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     conversation_id uuid NOT NULL UNIQUE REFERENCES public.conversations(id) ON DELETE CASCADE,
     current_state text DEFAULT 'idle' NOT NULL,
@@ -122,7 +182,7 @@ CREATE TABLE public.conversation_states (
     updated_at timestamptz DEFAULT now() NOT NULL
 );
 
-CREATE TABLE public.teams (
+CREATE TABLE IF NOT EXISTS public.teams (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     name text NOT NULL,
     description text,
@@ -134,7 +194,7 @@ CREATE TABLE public.teams (
     UNIQUE(user_id, name)
 );
 
-CREATE TABLE public.team_functions (
+CREATE TABLE IF NOT EXISTS public.team_functions (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     name text NOT NULL,
     description text,
@@ -145,7 +205,7 @@ CREATE TABLE public.team_functions (
     UNIQUE(user_id, name)
 );
 
-CREATE TABLE public.team_members (
+CREATE TABLE IF NOT EXISTS public.team_members (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     name text NOT NULL,
     email text NOT NULL UNIQUE,
@@ -163,7 +223,7 @@ CREATE TABLE public.team_members (
     user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.pipeline_stages (
+CREATE TABLE IF NOT EXISTS public.pipeline_stages (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     title text NOT NULL,
     color text DEFAULT 'border-slate-500' NOT NULL,
@@ -178,7 +238,7 @@ CREATE TABLE public.pipeline_stages (
 );
 ALTER TABLE ONLY public.pipeline_stages REPLICA IDENTITY FULL;
 
-CREATE TABLE public.deals (
+CREATE TABLE IF NOT EXISTS public.deals (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     contact_id uuid REFERENCES public.contacts(id) ON DELETE CASCADE,
     title text NOT NULL,
@@ -200,7 +260,7 @@ CREATE TABLE public.deals (
 );
 ALTER TABLE ONLY public.deals REPLICA IDENTITY FULL;
 
-CREATE TABLE public.deal_activities (
+CREATE TABLE IF NOT EXISTS public.deal_activities (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     deal_id uuid NOT NULL REFERENCES public.deals(id) ON DELETE CASCADE,
     type text DEFAULT 'note' NOT NULL,
@@ -214,7 +274,7 @@ CREATE TABLE public.deal_activities (
     updated_at timestamptz DEFAULT now()
 );
 
-CREATE TABLE public.appointments (
+CREATE TABLE IF NOT EXISTS public.appointments (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     title text NOT NULL,
     description text,
@@ -236,7 +296,7 @@ CREATE TABLE public.appointments (
     user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.tag_definitions (
+CREATE TABLE IF NOT EXISTS public.tag_definitions (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     key text NOT NULL,
     label text NOT NULL,
@@ -249,7 +309,7 @@ CREATE TABLE public.tag_definitions (
     UNIQUE(user_id, key)
 );
 
-CREATE TABLE public.nina_settings (
+CREATE TABLE IF NOT EXISTS public.nina_settings (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     is_active boolean DEFAULT true NOT NULL,
     system_prompt_override text,
@@ -290,7 +350,7 @@ CREATE TABLE public.nina_settings (
     user_id uuid UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.message_grouping_queue (
+CREATE TABLE IF NOT EXISTS public.message_grouping_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     whatsapp_message_id text NOT NULL,
     phone_number_id text NOT NULL,
@@ -302,7 +362,7 @@ CREATE TABLE public.message_grouping_queue (
     message_id uuid REFERENCES public.messages(id)
 );
 
-CREATE TABLE public.message_processing_queue (
+CREATE TABLE IF NOT EXISTS public.message_processing_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     whatsapp_message_id text NOT NULL,
     phone_number_id text NOT NULL,
@@ -317,7 +377,7 @@ CREATE TABLE public.message_processing_queue (
     updated_at timestamptz DEFAULT now() NOT NULL
 );
 
-CREATE TABLE public.nina_processing_queue (
+CREATE TABLE IF NOT EXISTS public.nina_processing_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     message_id uuid NOT NULL UNIQUE,
     conversation_id uuid NOT NULL,
@@ -333,7 +393,7 @@ CREATE TABLE public.nina_processing_queue (
     updated_at timestamptz DEFAULT now() NOT NULL
 );
 
-CREATE TABLE public.send_queue (
+CREATE TABLE IF NOT EXISTS public.send_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     conversation_id uuid NOT NULL,
     contact_id uuid NOT NULL,
@@ -353,7 +413,7 @@ CREATE TABLE public.send_queue (
     updated_at timestamptz DEFAULT now() NOT NULL
 );
 
-CREATE TABLE public.whatsapp_instances (
+CREATE TABLE IF NOT EXISTS public.whatsapp_instances (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
     name text NOT NULL,
@@ -371,7 +431,7 @@ CREATE TABLE public.whatsapp_instances (
     updated_at timestamptz DEFAULT now() NOT NULL
 );
 
-CREATE TABLE public.whatsapp_instance_secrets (
+CREATE TABLE IF NOT EXISTS public.whatsapp_instance_secrets (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     instance_id uuid NOT NULL UNIQUE REFERENCES public.whatsapp_instances(id) ON DELETE CASCADE,
     api_key text NOT NULL,
@@ -381,7 +441,7 @@ CREATE TABLE public.whatsapp_instance_secrets (
     updated_at timestamptz DEFAULT now() NOT NULL
 );
 
-CREATE TABLE public.round_robin_state (
+CREATE TABLE IF NOT EXISTS public.round_robin_state (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     function_id uuid NOT NULL UNIQUE REFERENCES public.team_functions(id) ON DELETE CASCADE,
     last_assigned_member_id uuid REFERENCES public.team_members(id) ON DELETE SET NULL,
@@ -390,7 +450,7 @@ CREATE TABLE public.round_robin_state (
     updated_at timestamptz DEFAULT now()
 );
 
-CREATE TABLE public.broadcast_campaigns (
+CREATE TABLE IF NOT EXISTS public.broadcast_campaigns (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     user_id uuid NOT NULL,
     name text NOT NULL,
@@ -415,7 +475,7 @@ CREATE TABLE public.broadcast_campaigns (
     updated_at timestamptz DEFAULT now() NOT NULL
 );
 
-CREATE TABLE public.broadcast_recipients (
+CREATE TABLE IF NOT EXISTS public.broadcast_recipients (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     campaign_id uuid NOT NULL REFERENCES public.broadcast_campaigns(id) ON DELETE CASCADE,
     phone_number text NOT NULL,
@@ -426,7 +486,7 @@ CREATE TABLE public.broadcast_recipients (
     created_at timestamptz DEFAULT now() NOT NULL
 );
 
-CREATE TABLE public.design_settings (
+CREATE TABLE IF NOT EXISTS public.design_settings (
     id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     logo_url text,
     primary_color text DEFAULT '37 30% 57%',
@@ -444,20 +504,64 @@ CREATE TABLE public.design_settings (
 );
 
 -- Add instance_id columns
-ALTER TABLE public.contacts ADD COLUMN instance_id uuid REFERENCES public.whatsapp_instances(id) ON DELETE SET NULL;
-ALTER TABLE public.conversations ADD COLUMN instance_id uuid REFERENCES public.whatsapp_instances(id) ON DELETE SET NULL;
-ALTER TABLE public.send_queue ADD COLUMN instance_id uuid REFERENCES public.whatsapp_instances(id) ON DELETE SET NULL;
-ALTER TABLE public.message_grouping_queue ADD COLUMN instance_id uuid REFERENCES public.whatsapp_instances(id) ON DELETE SET NULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM information_schema.columns 
+    WHERE table_schema = COALESCE(NULLIF(split_part('public.contacts', '.', 1), 'public.contacts'), 'public')
+      AND table_name = split_part('public.contacts', '.', 2)
+      AND column_name = 'instance_id'
+  ) THEN
+    ALTER TABLE public.contacts ADD COLUMN instance_id uuid REFERENCES public.whatsapp_instances(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM information_schema.columns 
+    WHERE table_schema = COALESCE(NULLIF(split_part('public.conversations', '.', 1), 'public.conversations'), 'public')
+      AND table_name = split_part('public.conversations', '.', 2)
+      AND column_name = 'instance_id'
+  ) THEN
+    ALTER TABLE public.conversations ADD COLUMN instance_id uuid REFERENCES public.whatsapp_instances(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM information_schema.columns 
+    WHERE table_schema = COALESCE(NULLIF(split_part('public.send_queue', '.', 1), 'public.send_queue'), 'public')
+      AND table_name = split_part('public.send_queue', '.', 2)
+      AND column_name = 'instance_id'
+  ) THEN
+    ALTER TABLE public.send_queue ADD COLUMN instance_id uuid REFERENCES public.whatsapp_instances(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM information_schema.columns 
+    WHERE table_schema = COALESCE(NULLIF(split_part('public.message_grouping_queue', '.', 1), 'public.message_grouping_queue'), 'public')
+      AND table_name = split_part('public.message_grouping_queue', '.', 2)
+      AND column_name = 'instance_id'
+  ) THEN
+    ALTER TABLE public.message_grouping_queue ADD COLUMN instance_id uuid REFERENCES public.whatsapp_instances(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- =============================================
 -- FUNCTIONS (that depend on tables)
 -- =============================================
 
-CREATE FUNCTION public.has_role(_user_id uuid, _role public.app_role) RETURNS boolean
+CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role public.app_role) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
     AS $$ SELECT EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = _user_id AND role = _role) $$;
 
-CREATE FUNCTION public.handle_new_user() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
     AS $$
 BEGIN
@@ -471,7 +575,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.update_conversation_last_message() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.update_conversation_last_message() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
     AS $$
 BEGIN
@@ -483,7 +587,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.update_conversation_state(p_conversation_id uuid, p_new_state text, p_action text DEFAULT NULL, p_context jsonb DEFAULT NULL) RETURNS public.conversation_states
+CREATE OR REPLACE FUNCTION public.update_conversation_state(p_conversation_id uuid, p_new_state text, p_action text DEFAULT NULL, p_context jsonb DEFAULT NULL) RETURNS public.conversation_states
     LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
     AS $$
 DECLARE state_record public.conversation_states;
@@ -500,7 +604,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.get_or_create_conversation_state(p_conversation_id uuid) RETURNS public.conversation_states
+CREATE OR REPLACE FUNCTION public.get_or_create_conversation_state(p_conversation_id uuid) RETURNS public.conversation_states
     LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
     AS $$
 DECLARE state_record public.conversation_states;
@@ -513,11 +617,11 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.update_client_memory(p_contact_id uuid, p_new_memory jsonb) RETURNS void
+CREATE OR REPLACE FUNCTION public.update_client_memory(p_contact_id uuid, p_new_memory jsonb) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
     AS $$ BEGIN UPDATE public.contacts SET client_memory = p_new_memory, updated_at = now() WHERE id = p_contact_id; END; $$;
 
-CREATE FUNCTION public.create_deal_for_new_contact() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.create_deal_for_new_contact() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
     AS $$
 DECLARE first_stage_id UUID;
@@ -530,11 +634,11 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.cleanup_processed_message_queue() RETURNS void
+CREATE OR REPLACE FUNCTION public.cleanup_processed_message_queue() RETURNS void
     LANGUAGE plpgsql SET search_path TO 'public'
     AS $$ BEGIN DELETE FROM public.message_grouping_queue WHERE processed = true AND created_at < now() - interval '1 hour'; END; $$;
 
-CREATE FUNCTION public.cleanup_processed_queues() RETURNS void
+CREATE OR REPLACE FUNCTION public.cleanup_processed_queues() RETURNS void
     LANGUAGE plpgsql SET search_path TO 'public'
     AS $$
 BEGIN
@@ -547,7 +651,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.claim_message_processing_batch(p_limit integer DEFAULT 50) RETURNS SETOF public.message_processing_queue
+CREATE OR REPLACE FUNCTION public.claim_message_processing_batch(p_limit integer DEFAULT 50) RETURNS SETOF public.message_processing_queue
     LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
     AS $$
 BEGIN
@@ -560,7 +664,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.claim_nina_processing_batch(p_limit integer DEFAULT 50) RETURNS SETOF public.nina_processing_queue
+CREATE OR REPLACE FUNCTION public.claim_nina_processing_batch(p_limit integer DEFAULT 50) RETURNS SETOF public.nina_processing_queue
     LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
     AS $$
 BEGIN
@@ -575,7 +679,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.claim_send_queue_batch(p_limit integer DEFAULT 10) RETURNS SETOF public.send_queue
+CREATE OR REPLACE FUNCTION public.claim_send_queue_batch(p_limit integer DEFAULT 10) RETURNS SETOF public.send_queue
     LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
     AS $$
 BEGIN
@@ -627,7 +731,7 @@ $$;
 -- =============================================
 -- VIEW
 -- =============================================
-CREATE VIEW public.contacts_with_stats WITH (security_invoker='true') AS
+CREATE OR REPLACE VIEW public.contacts_with_stats WITH (security_invoker='true') AS
  SELECT c.id, c.phone_number, c.whatsapp_id, c.name, c.call_name, c.email,
     c.profile_picture_url, c.is_business, c.is_blocked, c.blocked_at, c.blocked_reason,
     c.tags, c.notes, c.client_memory, c.first_contact_date, c.last_activity,
@@ -651,94 +755,126 @@ CREATE VIEW public.contacts_with_stats WITH (security_invoker='true') AS
 -- =============================================
 -- INDEXES
 -- =============================================
-CREATE INDEX idx_contacts_created_at ON public.contacts(created_at DESC);
-CREATE INDEX idx_contacts_is_blocked ON public.contacts(is_blocked);
-CREATE INDEX idx_contacts_last_activity ON public.contacts(last_activity DESC);
-CREATE INDEX idx_contacts_phone_number ON public.contacts(phone_number);
-CREATE INDEX idx_contacts_tags ON public.contacts USING gin(tags);
-CREATE INDEX idx_contacts_whatsapp_id ON public.contacts(whatsapp_id);
-CREATE INDEX idx_contacts_instance_id ON public.contacts(instance_id);
-CREATE INDEX idx_conversations_contact_id ON public.conversations(contact_id);
-CREATE INDEX idx_conversations_created_at ON public.conversations(created_at DESC);
-CREATE INDEX idx_conversations_is_active ON public.conversations(is_active);
-CREATE INDEX idx_conversations_last_message_at ON public.conversations(last_message_at DESC);
-CREATE INDEX idx_conversations_status ON public.conversations(status);
-CREATE INDEX idx_conversations_tags ON public.conversations USING gin(tags);
-CREATE INDEX idx_conversations_instance_id ON public.conversations(instance_id);
-CREATE INDEX idx_conversation_states_conversation_id ON public.conversation_states(conversation_id);
-CREATE INDEX idx_conversation_states_current_state ON public.conversation_states(current_state);
-CREATE INDEX idx_messages_conversation_id ON public.messages(conversation_id);
-CREATE INDEX idx_messages_created_at ON public.messages(created_at DESC);
-CREATE INDEX idx_messages_from_type ON public.messages(from_type);
-CREATE INDEX idx_messages_sent_at ON public.messages(sent_at DESC);
-CREATE INDEX idx_messages_status ON public.messages(status);
-CREATE INDEX idx_messages_whatsapp_message_id ON public.messages(whatsapp_message_id);
-CREATE UNIQUE INDEX messages_whatsapp_message_id_unique ON public.messages(whatsapp_message_id) WHERE whatsapp_message_id IS NOT NULL;
-CREATE INDEX idx_deal_activities_created_at ON public.deal_activities(created_at DESC);
-CREATE INDEX idx_deal_activities_deal_id ON public.deal_activities(deal_id);
-CREATE INDEX idx_message_grouping_queue_created_at ON public.message_grouping_queue(created_at);
-CREATE INDEX idx_message_grouping_queue_message_id ON public.message_grouping_queue(message_id);
-CREATE INDEX idx_message_grouping_queue_phone_number_id ON public.message_grouping_queue(phone_number_id);
-CREATE INDEX idx_message_grouping_queue_processed ON public.message_grouping_queue(processed);
-CREATE INDEX idx_message_grouping_ready ON public.message_grouping_queue(process_after, processed) WHERE processed = false;
-CREATE INDEX idx_message_grouping_queue_instance_id ON public.message_grouping_queue(instance_id);
-CREATE INDEX idx_message_processing_queue_priority ON public.message_processing_queue(priority DESC);
-CREATE INDEX idx_message_processing_queue_scheduled_for ON public.message_processing_queue(scheduled_for);
-CREATE INDEX idx_message_processing_queue_status ON public.message_processing_queue(status);
-CREATE INDEX idx_nina_processing_queue_conversation_id ON public.nina_processing_queue(conversation_id);
-CREATE INDEX idx_nina_processing_queue_message_id ON public.nina_processing_queue(message_id);
-CREATE INDEX idx_nina_processing_queue_priority ON public.nina_processing_queue(priority DESC);
-CREATE INDEX idx_nina_processing_queue_scheduled_for ON public.nina_processing_queue(scheduled_for);
-CREATE INDEX idx_nina_processing_queue_status ON public.nina_processing_queue(status);
-CREATE INDEX idx_nina_settings_is_active ON public.nina_settings(is_active);
-CREATE INDEX idx_pipeline_stages_is_active ON public.pipeline_stages(is_active);
-CREATE INDEX idx_pipeline_stages_position ON public.pipeline_stages("position");
-CREATE INDEX idx_send_queue_contact_id ON public.send_queue(contact_id);
-CREATE INDEX idx_send_queue_conversation_id ON public.send_queue(conversation_id);
-CREATE INDEX idx_send_queue_priority ON public.send_queue(priority DESC);
-CREATE INDEX idx_send_queue_scheduled_at ON public.send_queue(scheduled_at);
-CREATE INDEX idx_send_queue_status ON public.send_queue(status);
-CREATE INDEX idx_send_queue_instance_id ON public.send_queue(instance_id);
-CREATE INDEX idx_tag_definitions_category ON public.tag_definitions(category);
-CREATE INDEX idx_tag_definitions_key ON public.tag_definitions(key);
-CREATE INDEX idx_appointments_metadata_source ON public.appointments USING gin(metadata jsonb_path_ops);
-CREATE INDEX idx_whatsapp_instances_status ON public.whatsapp_instances(status);
-CREATE INDEX idx_whatsapp_instances_provider_type ON public.whatsapp_instances(provider_type);
-CREATE INDEX idx_whatsapp_instances_is_default ON public.whatsapp_instances(is_default) WHERE is_default = true;
-CREATE INDEX idx_broadcast_campaigns_user_id ON public.broadcast_campaigns(user_id);
-CREATE INDEX idx_broadcast_campaigns_status ON public.broadcast_campaigns(status);
-CREATE INDEX idx_broadcast_recipients_campaign_id ON public.broadcast_recipients(campaign_id);
-CREATE INDEX idx_broadcast_recipients_status ON public.broadcast_recipients(status);
-CREATE INDEX idx_broadcast_recipients_campaign_status ON public.broadcast_recipients(campaign_id, status);
+CREATE INDEX IF NOT EXISTS idx_contacts_created_at ON public.contacts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_contacts_is_blocked ON public.contacts(is_blocked);
+CREATE INDEX IF NOT EXISTS idx_contacts_last_activity ON public.contacts(last_activity DESC);
+CREATE INDEX IF NOT EXISTS idx_contacts_phone_number ON public.contacts(phone_number);
+CREATE INDEX IF NOT EXISTS idx_contacts_tags ON public.contacts USING gin(tags);
+CREATE INDEX IF NOT EXISTS idx_contacts_whatsapp_id ON public.contacts(whatsapp_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_instance_id ON public.contacts(instance_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_contact_id ON public.conversations(contact_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON public.conversations(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversations_is_active ON public.conversations(is_active);
+CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON public.conversations(last_message_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversations_status ON public.conversations(status);
+CREATE INDEX IF NOT EXISTS idx_conversations_tags ON public.conversations USING gin(tags);
+CREATE INDEX IF NOT EXISTS idx_conversations_instance_id ON public.conversations(instance_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_states_conversation_id ON public.conversation_states(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_states_current_state ON public.conversation_states(current_state);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON public.messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON public.messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_from_type ON public.messages(from_type);
+CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON public.messages(sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_status ON public.messages(status);
+CREATE INDEX IF NOT EXISTS idx_messages_whatsapp_message_id ON public.messages(whatsapp_message_id);
+CREATE UNIQUE INDEX IF NOT EXISTS messages_whatsapp_message_id_unique ON public.messages(whatsapp_message_id) WHERE whatsapp_message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_deal_activities_created_at ON public.deal_activities(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_deal_activities_deal_id ON public.deal_activities(deal_id);
+CREATE INDEX IF NOT EXISTS idx_message_grouping_queue_created_at ON public.message_grouping_queue(created_at);
+CREATE INDEX IF NOT EXISTS idx_message_grouping_queue_message_id ON public.message_grouping_queue(message_id);
+CREATE INDEX IF NOT EXISTS idx_message_grouping_queue_phone_number_id ON public.message_grouping_queue(phone_number_id);
+CREATE INDEX IF NOT EXISTS idx_message_grouping_queue_processed ON public.message_grouping_queue(processed);
+CREATE INDEX IF NOT EXISTS idx_message_grouping_ready ON public.message_grouping_queue(process_after, processed) WHERE processed = false;
+CREATE INDEX IF NOT EXISTS idx_message_grouping_queue_instance_id ON public.message_grouping_queue(instance_id);
+CREATE INDEX IF NOT EXISTS idx_message_processing_queue_priority ON public.message_processing_queue(priority DESC);
+CREATE INDEX IF NOT EXISTS idx_message_processing_queue_scheduled_for ON public.message_processing_queue(scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_message_processing_queue_status ON public.message_processing_queue(status);
+CREATE INDEX IF NOT EXISTS idx_nina_processing_queue_conversation_id ON public.nina_processing_queue(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_nina_processing_queue_message_id ON public.nina_processing_queue(message_id);
+CREATE INDEX IF NOT EXISTS idx_nina_processing_queue_priority ON public.nina_processing_queue(priority DESC);
+CREATE INDEX IF NOT EXISTS idx_nina_processing_queue_scheduled_for ON public.nina_processing_queue(scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_nina_processing_queue_status ON public.nina_processing_queue(status);
+CREATE INDEX IF NOT EXISTS idx_nina_settings_is_active ON public.nina_settings(is_active);
+CREATE INDEX IF NOT EXISTS idx_pipeline_stages_is_active ON public.pipeline_stages(is_active);
+CREATE INDEX IF NOT EXISTS idx_pipeline_stages_position ON public.pipeline_stages("position");
+CREATE INDEX IF NOT EXISTS idx_send_queue_contact_id ON public.send_queue(contact_id);
+CREATE INDEX IF NOT EXISTS idx_send_queue_conversation_id ON public.send_queue(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_send_queue_priority ON public.send_queue(priority DESC);
+CREATE INDEX IF NOT EXISTS idx_send_queue_scheduled_at ON public.send_queue(scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_send_queue_status ON public.send_queue(status);
+CREATE INDEX IF NOT EXISTS idx_send_queue_instance_id ON public.send_queue(instance_id);
+CREATE INDEX IF NOT EXISTS idx_tag_definitions_category ON public.tag_definitions(category);
+CREATE INDEX IF NOT EXISTS idx_tag_definitions_key ON public.tag_definitions(key);
+CREATE INDEX IF NOT EXISTS idx_appointments_metadata_source ON public.appointments USING gin(metadata jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_instances_status ON public.whatsapp_instances(status);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_instances_provider_type ON public.whatsapp_instances(provider_type);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_instances_is_default ON public.whatsapp_instances(is_default) WHERE is_default = true;
+CREATE INDEX IF NOT EXISTS idx_broadcast_campaigns_user_id ON public.broadcast_campaigns(user_id);
+CREATE INDEX IF NOT EXISTS idx_broadcast_campaigns_status ON public.broadcast_campaigns(status);
+CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_campaign_id ON public.broadcast_recipients(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_status ON public.broadcast_recipients(status);
+CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_campaign_status ON public.broadcast_recipients(campaign_id, status);
 
 -- =============================================
 -- TRIGGERS
 -- =============================================
+DROP TRIGGER IF EXISTS update_contacts_updated_at ON public.contacts;
 CREATE TRIGGER update_contacts_updated_at BEFORE UPDATE ON public.contacts FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_conversations_updated_at ON public.conversations;
 CREATE TRIGGER update_conversations_updated_at BEFORE UPDATE ON public.conversations FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_conversation_states_updated_at ON public.conversation_states;
 CREATE TRIGGER update_conversation_states_updated_at BEFORE UPDATE ON public.conversation_states FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_deals_updated_at ON public.deals;
 CREATE TRIGGER update_deals_updated_at BEFORE UPDATE ON public.deals FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_deal_activities_updated_at ON public.deal_activities;
 CREATE TRIGGER update_deal_activities_updated_at BEFORE UPDATE ON public.deal_activities FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_appointments_updated_at ON public.appointments;
 CREATE TRIGGER update_appointments_updated_at BEFORE UPDATE ON public.appointments FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_nina_settings_updated_at ON public.nina_settings;
 CREATE TRIGGER update_nina_settings_updated_at BEFORE UPDATE ON public.nina_settings FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_pipeline_stages_updated_at ON public.pipeline_stages;
 CREATE TRIGGER update_pipeline_stages_updated_at BEFORE UPDATE ON public.pipeline_stages FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_tag_definitions_updated_at ON public.tag_definitions;
 CREATE TRIGGER update_tag_definitions_updated_at BEFORE UPDATE ON public.tag_definitions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_team_functions_updated_at ON public.team_functions;
 CREATE TRIGGER update_team_functions_updated_at BEFORE UPDATE ON public.team_functions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_team_members_updated_at ON public.team_members;
 CREATE TRIGGER update_team_members_updated_at BEFORE UPDATE ON public.team_members FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_teams_updated_at ON public.teams;
 CREATE TRIGGER update_teams_updated_at BEFORE UPDATE ON public.teams FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_message_processing_queue_updated_at ON public.message_processing_queue;
 CREATE TRIGGER update_message_processing_queue_updated_at BEFORE UPDATE ON public.message_processing_queue FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_nina_processing_queue_updated_at ON public.nina_processing_queue;
 CREATE TRIGGER update_nina_processing_queue_updated_at BEFORE UPDATE ON public.nina_processing_queue FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_send_queue_updated_at ON public.send_queue;
 CREATE TRIGGER update_send_queue_updated_at BEFORE UPDATE ON public.send_queue FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_whatsapp_instances_updated_at ON public.whatsapp_instances;
 CREATE TRIGGER update_whatsapp_instances_updated_at BEFORE UPDATE ON public.whatsapp_instances FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_whatsapp_instance_secrets_updated_at ON public.whatsapp_instance_secrets;
 CREATE TRIGGER update_whatsapp_instance_secrets_updated_at BEFORE UPDATE ON public.whatsapp_instance_secrets FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_round_robin_state_updated_at ON public.round_robin_state;
 CREATE TRIGGER update_round_robin_state_updated_at BEFORE UPDATE ON public.round_robin_state FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_broadcast_campaigns_updated_at ON public.broadcast_campaigns;
 CREATE TRIGGER update_broadcast_campaigns_updated_at BEFORE UPDATE ON public.broadcast_campaigns FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS update_design_settings_updated_at ON public.design_settings;
 CREATE TRIGGER update_design_settings_updated_at BEFORE UPDATE ON public.design_settings FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DROP TRIGGER IF EXISTS auto_create_deal_on_contact ON public.contacts;
 CREATE TRIGGER auto_create_deal_on_contact AFTER INSERT ON public.contacts FOR EACH ROW EXECUTE FUNCTION public.create_deal_for_new_contact();
+DROP TRIGGER IF EXISTS update_conversation_last_message_trigger ON public.messages;
 CREATE TRIGGER update_conversation_last_message_trigger AFTER INSERT ON public.messages FOR EACH ROW EXECUTE FUNCTION public.update_conversation_last_message();
+DROP TRIGGER IF EXISTS ensure_single_default_instance_trigger ON public.whatsapp_instances;
 CREATE TRIGGER ensure_single_default_instance_trigger BEFORE INSERT OR UPDATE ON public.whatsapp_instances FOR EACH ROW EXECUTE FUNCTION ensure_single_default_instance();
-CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+DO $$
+BEGIN
+  CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+END $$;
 
 -- =============================================
 -- RLS
@@ -769,68 +905,442 @@ ALTER TABLE public.broadcast_campaigns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.broadcast_recipients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.design_settings ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Admins can manage all roles" ON public.user_roles USING (public.has_role(auth.uid(), 'admin'));
-CREATE POLICY "Users can read own role" ON public.user_roles FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Authenticated users can access all contacts" ON public.contacts USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Authenticated users can access all conversations" ON public.conversations USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Authenticated users can access all messages" ON public.messages USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Authenticated users can access all deals" ON public.deals FOR ALL TO authenticated USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Authenticated users can access all appointments" ON public.appointments FOR ALL TO authenticated USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Users can access activities of their deals" ON public.deal_activities USING (true) WITH CHECK (true);
-CREATE POLICY "Authenticated users can access conversation_states" ON public.conversation_states USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Admins can modify nina_settings" ON public.nina_settings TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
-CREATE POLICY "Authenticated can read nina_settings" ON public.nina_settings FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Admins can modify pipeline_stages" ON public.pipeline_stages TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
-CREATE POLICY "Authenticated can read pipeline_stages" ON public.pipeline_stages FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Admins can modify tag_definitions" ON public.tag_definitions TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
-CREATE POLICY "Authenticated can read tag_definitions" ON public.tag_definitions FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Admins can modify teams" ON public.teams TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
-CREATE POLICY "Authenticated can read teams" ON public.teams FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Admins can modify team_functions" ON public.team_functions TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
-CREATE POLICY "Authenticated can read team_functions" ON public.team_functions FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Admins can modify team_members" ON public.team_members TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
-CREATE POLICY "Authenticated can read team_members" ON public.team_members FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow all operations on message_grouping_queue" ON public.message_grouping_queue USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all operations on message_processing_queue" ON public.message_processing_queue USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all operations on nina_processing_queue" ON public.nina_processing_queue USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all operations on send_queue" ON public.send_queue USING (true) WITH CHECK (true);
-CREATE POLICY "Admins can manage all whatsapp_instances" ON public.whatsapp_instances FOR ALL USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
-CREATE POLICY "Authenticated users can read whatsapp_instances" ON public.whatsapp_instances FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "Authenticated users can update whatsapp_instances" ON public.whatsapp_instances FOR UPDATE USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Admins can manage whatsapp_instance_secrets" ON public.whatsapp_instance_secrets FOR ALL USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
-CREATE POLICY "Allow all operations on round_robin_state" ON public.round_robin_state FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Users can select own campaigns" ON public.broadcast_campaigns FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own campaigns" ON public.broadcast_campaigns FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own campaigns" ON public.broadcast_campaigns FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can delete own campaigns" ON public.broadcast_campaigns FOR DELETE USING (auth.uid() = user_id);
-CREATE POLICY "Users can select own recipients" ON public.broadcast_recipients FOR SELECT USING (campaign_id IN (SELECT id FROM public.broadcast_campaigns WHERE user_id = auth.uid()));
-CREATE POLICY "Users can insert own recipients" ON public.broadcast_recipients FOR INSERT WITH CHECK (campaign_id IN (SELECT id FROM public.broadcast_campaigns WHERE user_id = auth.uid()));
-CREATE POLICY "Users can update own recipients" ON public.broadcast_recipients FOR UPDATE USING (campaign_id IN (SELECT id FROM public.broadcast_campaigns WHERE user_id = auth.uid()));
-CREATE POLICY "Users can delete own recipients" ON public.broadcast_recipients FOR DELETE USING (campaign_id IN (SELECT id FROM public.broadcast_campaigns WHERE user_id = auth.uid()));
-CREATE POLICY "Admins can modify design_settings" ON public.design_settings FOR ALL USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
-CREATE POLICY "Authenticated can read design_settings" ON public.design_settings FOR SELECT USING (true);
+DO $$
+BEGIN
+  CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can manage all roles" ON public.user_roles USING (public.has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can read own role" ON public.user_roles FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated users can access all contacts" ON public.contacts USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated users can access all conversations" ON public.conversations USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated users can access all messages" ON public.messages USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated users can access all deals" ON public.deals FOR ALL TO authenticated USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated users can access all appointments" ON public.appointments FOR ALL TO authenticated USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can access activities of their deals" ON public.deal_activities USING (true) WITH CHECK (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated users can access conversation_states" ON public.conversation_states USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify nina_settings" ON public.nina_settings TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read nina_settings" ON public.nina_settings FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify pipeline_stages" ON public.pipeline_stages TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read pipeline_stages" ON public.pipeline_stages FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify tag_definitions" ON public.tag_definitions TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read tag_definitions" ON public.tag_definitions FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify teams" ON public.teams TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read teams" ON public.teams FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify team_functions" ON public.team_functions TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read team_functions" ON public.team_functions FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify team_members" ON public.team_members TO authenticated USING (public.has_role(auth.uid(), 'admin')) WITH CHECK (public.has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read team_members" ON public.team_members FOR SELECT TO authenticated USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Allow all operations on message_grouping_queue" ON public.message_grouping_queue USING (true) WITH CHECK (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Allow all operations on message_processing_queue" ON public.message_processing_queue USING (true) WITH CHECK (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Allow all operations on nina_processing_queue" ON public.nina_processing_queue USING (true) WITH CHECK (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Allow all operations on send_queue" ON public.send_queue USING (true) WITH CHECK (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can manage all whatsapp_instances" ON public.whatsapp_instances FOR ALL USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated users can read whatsapp_instances" ON public.whatsapp_instances FOR SELECT USING (auth.role() = 'authenticated');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated users can update whatsapp_instances" ON public.whatsapp_instances FOR UPDATE USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can manage whatsapp_instance_secrets" ON public.whatsapp_instance_secrets FOR ALL USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Allow all operations on round_robin_state" ON public.round_robin_state FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can select own campaigns" ON public.broadcast_campaigns FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can insert own campaigns" ON public.broadcast_campaigns FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can update own campaigns" ON public.broadcast_campaigns FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can delete own campaigns" ON public.broadcast_campaigns FOR DELETE USING (auth.uid() = user_id);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can select own recipients" ON public.broadcast_recipients FOR SELECT USING (campaign_id IN (SELECT id FROM public.broadcast_campaigns WHERE user_id = auth.uid()));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can insert own recipients" ON public.broadcast_recipients FOR INSERT WITH CHECK (campaign_id IN (SELECT id FROM public.broadcast_campaigns WHERE user_id = auth.uid()));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can update own recipients" ON public.broadcast_recipients FOR UPDATE USING (campaign_id IN (SELECT id FROM public.broadcast_campaigns WHERE user_id = auth.uid()));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Users can delete own recipients" ON public.broadcast_recipients FOR DELETE USING (campaign_id IN (SELECT id FROM public.broadcast_campaigns WHERE user_id = auth.uid()));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can modify design_settings" ON public.design_settings FOR ALL USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read design_settings" ON public.design_settings FOR SELECT USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+  WHEN undefined_table THEN null;
+END $$;
 
 -- =============================================
 -- STORAGE
 -- =============================================
-INSERT INTO storage.buckets (id, name, public) VALUES ('logos', 'logos', true);
-CREATE POLICY "Admins can upload logos" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'logos' AND has_role(auth.uid(), 'admin'));
-CREATE POLICY "Anyone can view logos" ON storage.objects FOR SELECT USING (bucket_id = 'logos');
-CREATE POLICY "Admins can delete logos" ON storage.objects FOR DELETE USING (bucket_id = 'logos' AND has_role(auth.uid(), 'admin'));
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('logos', 'logos', true)
+ON CONFLICT (id) DO NOTHING;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can upload logos" ON storage.objects
+    FOR INSERT WITH CHECK (bucket_id = 'logos' AND has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Anyone can view logos" ON storage.objects
+    FOR SELECT USING (bucket_id = 'logos');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+END $$;
+DO $$
+BEGIN
+  CREATE POLICY "Admins can delete logos" ON storage.objects
+    FOR DELETE USING (bucket_id = 'logos' AND has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+END $$;
 
 -- =============================================
 -- REALTIME
 -- =============================================
-ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.conversations;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.contacts;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.deals;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.pipeline_stages;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.teams;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.team_functions;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.team_members;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.appointments;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.broadcast_campaigns;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.conversations;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.contacts;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.deals;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.pipeline_stages;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.teams;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.team_functions;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.team_members;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.appointments;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.broadcast_campaigns;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;

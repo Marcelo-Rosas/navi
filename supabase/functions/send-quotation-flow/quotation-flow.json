@@ -1,5 +1,5 @@
 {
-  "version": "5.0",
+  "version": "7.3",
   "data_api_version": "3.0",
   "routing_model": {
     "QUOTATION_FORM": []
@@ -7,8 +7,9 @@
   "screens": [
     {
       "id": "QUOTATION_FORM",
-      "title": "Solicitar Cotação",
+      "title": "Cotação de Frete",
       "terminal": true,
+      "success": true,
       "data": {},
       "layout": {
         "type": "SingleColumnLayout",
@@ -35,7 +36,7 @@
           },
           {
             "type": "TextInput",
-            "name": "peso_kg",
+            "name": "peso",
             "label": "Peso total (kg)",
             "input-type": "number",
             "required": true,
@@ -43,7 +44,7 @@
           },
           {
             "type": "TextInput",
-            "name": "cargo_value",
+            "name": "valor_declarado",
             "label": "Valor da mercadoria (R$)",
             "input-type": "number",
             "required": true,
@@ -57,8 +58,8 @@
               "payload": {
                 "origem": "${form.origem}",
                 "destino": "${form.destino}",
-                "peso_kg": "${form.peso_kg}",
-                "cargo_value": "${form.cargo_value}"
+                "peso": "${form.peso}",
+                "valor_declarado": "${form.valor_declarado}"
               }
             }
           }

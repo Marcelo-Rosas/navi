@@ -1,6 +1,6 @@
 
 -- Tabela de design settings
-CREATE TABLE public.design_settings (
+CREATE TABLE IF NOT EXISTS public.design_settings (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   logo_url text,
   primary_color text DEFAULT '37 30% 57%',
@@ -23,16 +23,36 @@ CREATE POLICY "Authenticated can read design_settings" ON public.design_settings
   FOR SELECT USING (true);
 
 -- Storage bucket para logos
-INSERT INTO storage.buckets (id, name, public) VALUES ('logos', 'logos', true);
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('logos', 'logos', true)
+ON CONFLICT (id) DO NOTHING;
 
-CREATE POLICY "Admins can upload logos" ON storage.objects
-  FOR INSERT WITH CHECK (bucket_id = 'logos' AND has_role(auth.uid(), 'admin'));
+DO $$
+BEGIN
+  CREATE POLICY "Admins can upload logos" ON storage.objects
+    FOR INSERT WITH CHECK (bucket_id = 'logos' AND has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+END $$;
 
-CREATE POLICY "Anyone can view logos" ON storage.objects
-  FOR SELECT USING (bucket_id = 'logos');
+DO $$
+BEGIN
+  CREATE POLICY "Anyone can view logos" ON storage.objects
+    FOR SELECT USING (bucket_id = 'logos');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+END $$;
 
-CREATE POLICY "Admins can delete logos" ON storage.objects
-  FOR DELETE USING (bucket_id = 'logos' AND has_role(auth.uid(), 'admin'));
+DO $$
+BEGIN
+  CREATE POLICY "Admins can delete logos" ON storage.objects
+    FOR DELETE USING (bucket_id = 'logos' AND has_role(auth.uid(), 'admin'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+  WHEN insufficient_privilege THEN null;
+END $$;
 
 -- Trigger para updated_at
 CREATE TRIGGER update_design_settings_updated_at
