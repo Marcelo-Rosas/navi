@@ -7,8 +7,8 @@ import { Button } from '@/components/Button';
 import { useOnboardingStatus } from '@/hooks/useOnboardingStatus';
 import { useAuth } from '@/hooks/useAuth';
 import { StepIdentity } from './onboarding/StepIdentity';
-import { StepEvolutionWhatsApp } from './onboarding/StepEvolutionWhatsApp';
-import { StepEvolutionConnect } from './onboarding/StepEvolutionConnect';
+import { StepWhatsApp } from './onboarding/StepWhatsApp';
+import { StepMetaConnect } from './onboarding/StepMetaConnect';
 import { StepAgent } from './onboarding/StepAgent';
 import { StepElevenLabs } from './onboarding/StepElevenLabs';
 import { StepBusinessHours } from './onboarding/StepBusinessHours';
@@ -200,9 +200,11 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
   const [companyName, setCompanyName] = useState('');
   const [sdrName, setSdrName] = useState('');
   
-  // Form state - Evolution API (replaces official WhatsApp)
-  const [evolutionApiUrl, setEvolutionApiUrl] = useState('');
-  const [evolutionApiKey, setEvolutionApiKey] = useState('');
+  // Form state - Meta WhatsApp Cloud API
+  const [whatsappAccessToken, setWhatsappAccessToken] = useState('');
+  const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState('');
+  const [whatsappBusinessAccountId, setWhatsappBusinessAccountId] = useState('');
+  const [whatsappVerifyToken, setWhatsappVerifyToken] = useState('');
   // Form state - Agent
   const [systemPrompt, setSystemPrompt] = useState('');
   const [aiModelMode, setAiModelMode] = useState('flash');
@@ -222,7 +224,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
   const [businessHoursEnd, setBusinessHoursEnd] = useState('18:00');
   const [businessDays, setBusinessDays] = useState<number[]>([1, 2, 3, 4, 5]);
 
-  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/evolution-webhook`;
+  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
 
   // Initialize system and load settings
   useEffect(() => {
@@ -244,9 +246,11 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
           setCompanyName(data.company_name || '');
           setSdrName(data.sdr_name || '');
           
-          // Evolution API
-          setEvolutionApiUrl((data as any).evolution_api_url || '');
-          setEvolutionApiKey((data as any).evolution_api_key || '');
+          // Meta WhatsApp Cloud API
+          setWhatsappAccessToken(data.whatsapp_access_token || '');
+          setWhatsappPhoneNumberId(data.whatsapp_phone_number_id || '');
+          setWhatsappBusinessAccountId(data.whatsapp_business_account_id || '');
+          setWhatsappVerifyToken(data.whatsapp_verify_token || '');
           // Agent - usar prompt padrão se vazio
           setSystemPrompt(data.system_prompt_override || DEFAULT_NINA_PROMPT);
           setAiModelMode(data.ai_model_mode || 'flash');
@@ -291,15 +295,11 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
         if (!companyName?.trim()) issues.push('Nome da empresa está vazio');
         if (!sdrName?.trim()) issues.push('Nome do SDR está vazio');
         break;
-      case 1: // Evolution API
-        console.log('[OnboardingWizard] Step 1 (Evolution) values:', { 
-          evolutionApiUrl: evolutionApiUrl || 'EMPTY',
-          evolutionApiKey: evolutionApiKey ? '***' : 'EMPTY',
-        });
-        if (!evolutionApiUrl?.trim()) issues.push('URL da Evolution API está vazia');
-        if (!evolutionApiKey?.trim()) issues.push('API Key da Evolution está vazia');
+      case 1: // Meta Cloud API credentials
+        if (!whatsappAccessToken?.trim()) issues.push('Access Token da Meta está vazio');
+        if (!whatsappPhoneNumberId?.trim()) issues.push('Phone Number ID está vazio');
         break;
-      case 2: // WhatsApp Connect (QR Code) - no blocking validation
+      case 2: // Register Meta instance — optional blocking (user can register on finish)
         break;
       case 3: // Agent
         console.log('[OnboardingWizard] Step 3 (Agent) values:', { 
@@ -320,7 +320,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
     }
     
     return { valid: issues.length === 0, issues };
-  }, [companyName, sdrName, evolutionApiUrl, evolutionApiKey,
+  }, [companyName, sdrName, whatsappAccessToken, whatsappPhoneNumberId,
       systemPrompt, aiModelMode, elevenLabsApiKey, audioResponseEnabled,
       timezone, businessHoursStart, businessHoursEnd, businessDays]);
 
@@ -340,8 +340,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
     console.log('[OnboardingWizard] Current form state:', {
       companyName: companyName || '(empty)',
       sdrName: sdrName || '(empty)',
-      evolutionApiUrl: evolutionApiUrl || '(empty)',
-      evolutionApiKey: evolutionApiKey ? '***' : '(empty)',
+      whatsappAccessToken: whatsappAccessToken ? '***' : '(empty)',
+      whatsappPhoneNumberId: whatsappPhoneNumberId || '(empty)',
       systemPrompt: systemPrompt ? `${systemPrompt.substring(0, 50)}...` : '(empty)',
       aiModelMode,
       elevenLabsApiKey: elevenLabsApiKey ? '***' : '(empty)',
@@ -380,9 +380,10 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
         company_name: companyName?.trim() || null,
         sdr_name: sdrName?.trim() || null,
         
-        // Evolution API credentials
-        evolution_api_url: evolutionApiUrl?.trim() || null,
-        evolution_api_key: evolutionApiKey?.trim() || null,
+        whatsapp_access_token: whatsappAccessToken?.trim() || null,
+        whatsapp_phone_number_id: whatsappPhoneNumberId?.trim() || null,
+        whatsapp_business_account_id: whatsappBusinessAccountId?.trim() || null,
+        whatsapp_verify_token: whatsappVerifyToken?.trim() || null,
         
         // Agent
         system_prompt_override: systemPrompt?.trim() || DEFAULT_NINA_PROMPT,
@@ -414,8 +415,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
       console.log('[OnboardingWizard] Step 2: Settings object built:', {
         company_name: settings.company_name,
         sdr_name: settings.sdr_name,
-        evolution_api_url: settings.evolution_api_url ? '✓ SET' : '✗ EMPTY',
-        evolution_api_key: settings.evolution_api_key ? '✓ SET' : '✗ EMPTY',
+        whatsapp_phone_number_id: settings.whatsapp_phone_number_id ? '✓ SET' : '✗ EMPTY',
+        whatsapp_access_token: settings.whatsapp_access_token ? '✓ SET' : '✗ EMPTY',
         system_prompt_override: settings.system_prompt_override ? '✓ SET' : '✗ EMPTY',
         elevenlabs_api_key: settings.elevenlabs_api_key ? '✓ SET' : '✗ EMPTY',
         is_active: settings.is_active,
@@ -463,8 +464,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
         id: savedData.id,
         company_name: savedData.company_name,
         sdr_name: savedData.sdr_name,
-        evolution_api_url: (savedData as any).evolution_api_url ? '✓ SAVED' : '✗ NOT SAVED',
-        evolution_api_key: (savedData as any).evolution_api_key ? '✓ SAVED' : '✗ NOT SAVED',
+        whatsapp_phone_number_id: savedData.whatsapp_phone_number_id ? '✓ SAVED' : '✗ NOT SAVED',
+        whatsapp_access_token: savedData.whatsapp_access_token ? '✓ SAVED' : '✗ NOT SAVED',
         system_prompt_override: savedData.system_prompt_override ? '✓ SAVED' : '✗ NOT SAVED',
         is_active: savedData.is_active,
       });
@@ -506,7 +507,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
       setIsSaving(false);
     }
   }, [
-    user, activeStep, companyName, sdrName, evolutionApiUrl, evolutionApiKey,
+    user, activeStep, companyName, sdrName, whatsappAccessToken, whatsappPhoneNumberId,
+    whatsappBusinessAccountId, whatsappVerifyToken,
     systemPrompt, aiModelMode, elevenLabsApiKey, elevenLabsVoiceId, elevenLabsModel,
     audioResponseEnabled, elevenLabsStability, elevenLabsSimilarityBoost, elevenLabsSpeed,
     timezone, businessHoursStart, businessHoursEnd, businessDays, refetch
@@ -595,18 +597,23 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
         );
       case 1:
         return (
-          <StepEvolutionWhatsApp
-            evolutionApiUrl={evolutionApiUrl}
-            evolutionApiKey={evolutionApiKey}
-            onEvolutionApiUrlChange={setEvolutionApiUrl}
-            onEvolutionApiKeyChange={setEvolutionApiKey}
+          <StepWhatsApp
+            accessToken={whatsappAccessToken}
+            phoneNumberId={whatsappPhoneNumberId}
+            businessAccountId={whatsappBusinessAccountId}
+            verifyToken={whatsappVerifyToken}
+            onAccessTokenChange={setWhatsappAccessToken}
+            onPhoneNumberIdChange={setWhatsappPhoneNumberId}
+            onBusinessAccountIdChange={setWhatsappBusinessAccountId}
+            onVerifyTokenChange={setWhatsappVerifyToken}
+            webhookUrl={webhookUrl}
           />
         );
       case 2:
         return (
-          <StepEvolutionConnect
-            evolutionApiUrl={evolutionApiUrl}
-            evolutionApiKey={evolutionApiKey}
+          <StepMetaConnect
+            accessToken={whatsappAccessToken}
+            phoneNumberId={whatsappPhoneNumberId}
           />
         );
       case 3:

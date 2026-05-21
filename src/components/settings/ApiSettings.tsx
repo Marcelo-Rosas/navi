@@ -1,5 +1,5 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle, useRef, useCallback } from 'react';
-import { Save, MessageSquare, Mic, Eye, EyeOff, Copy, Check, Loader2, Send, ChevronDown, Volume2, Download, Upload, FileAudio, HelpCircle, Smartphone, Server, Wifi, WifiOff, CheckCircle2, XCircle } from 'lucide-react';
+import { Save, MessageSquare, Mic, Eye, EyeOff, Copy, Check, Loader2, Send, ChevronDown, Volume2, Download, Upload, FileAudio, HelpCircle } from 'lucide-react';
 import { Button } from '../Button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -13,6 +13,7 @@ interface NinaSettings {
   id?: string;
   whatsapp_access_token: string | null;
   whatsapp_phone_number_id: string | null;
+  whatsapp_business_account_id: string | null;
   whatsapp_verify_token: string | null;
   elevenlabs_api_key: string | null;
   elevenlabs_voice_id: string;
@@ -70,7 +71,6 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
   const [saving, setSaving] = useState(false);
   const [showWhatsAppToken, setShowWhatsAppToken] = useState(false);
   const [showElevenLabsKey, setShowElevenLabsKey] = useState(false);
-  const [showEvolutionApiKey, setShowEvolutionApiKey] = useState(false);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [webhookOpen, setWebhookOpen] = useState(false);
   const [advancedVoiceOpen, setAdvancedVoiceOpen] = useState(false);
@@ -78,9 +78,6 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('');
   const [testSending, setTestSending] = useState(false);
-  const [evolutionTesting, setEvolutionTesting] = useState(false);
-  const [evolutionTestResult, setEvolutionTestResult] = useState<{ ok: boolean; message: string } | null>(null);
-  
   // Audio test states
   const [audioTestOpen, setAudioTestOpen] = useState(false);
   const [audioTestText, setAudioTestText] = useState('Olá! Esta é uma mensagem de teste para verificar a qualidade da voz.');
@@ -110,6 +107,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
   const [settings, setSettings] = useState<NinaSettings>({
     whatsapp_access_token: null,
     whatsapp_phone_number_id: null,
+    whatsapp_business_account_id: null,
     whatsapp_verify_token: generateUniqueToken(),
     elevenlabs_api_key: null,
     elevenlabs_voice_id: '33B4UnXyTNbgLmdEDh5P',
@@ -141,28 +139,6 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
       toast.success('API Key da ElevenLabs salva automaticamente');
     } catch (error) {
       console.error('Error auto-saving ElevenLabs key:', error);
-    }
-  };
-
-  // Auto-save Evolution API credentials when fields lose focus
-  const handleEvolutionApiBlur = async () => {
-    if (!settings.id) return;
-    if (!settings.evolution_api_url && !settings.evolution_api_key) return;
-
-    try {
-      const { error } = await supabase
-        .from('nina_settings')
-        .update({
-          evolution_api_url: settings.evolution_api_url,
-          evolution_api_key: settings.evolution_api_key,
-          updated_at: new Date().toISOString(),
-        } as any)
-        .eq('id', settings.id);
-
-      if (error) throw error;
-      toast.success('Evolution API salva automaticamente');
-    } catch (error) {
-      console.error('Error auto-saving Evolution API settings:', error);
     }
   };
 
@@ -212,6 +188,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
         id: data.id,
         whatsapp_access_token: data.whatsapp_access_token,
         whatsapp_phone_number_id: data.whatsapp_phone_number_id,
+        whatsapp_business_account_id: data.whatsapp_business_account_id,
         whatsapp_verify_token: uniqueToken,
         elevenlabs_api_key: data.elevenlabs_api_key,
         elevenlabs_voice_id: data.elevenlabs_voice_id,
@@ -247,6 +224,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
         .update({
           whatsapp_access_token: settings.whatsapp_access_token,
           whatsapp_phone_number_id: settings.whatsapp_phone_number_id,
+          whatsapp_business_account_id: settings.whatsapp_business_account_id,
           whatsapp_verify_token: settings.whatsapp_verify_token,
           elevenlabs_api_key: settings.elevenlabs_api_key,
           elevenlabs_voice_id: settings.elevenlabs_voice_id,
@@ -285,48 +263,6 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
     if (!settings.whatsapp_verify_token) return;
     navigator.clipboard.writeText(settings.whatsapp_verify_token);
     toast.success('Verify Token copiado!');
-  };
-
-  const handleTestEvolutionConnection = async () => {
-    if (!settings.evolution_api_url || !settings.evolution_api_key) {
-      toast.error('Preencha a URL e a API Key da Evolution antes de testar');
-      return;
-    }
-    setEvolutionTesting(true);
-    setEvolutionTestResult(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('test-evolution-connection', {
-        body: {
-          api_url: settings.evolution_api_url,
-          api_key: settings.evolution_api_key,
-          instance_name: '__health_check__',
-          provider_type: 'evolution_self_hosted',
-        }
-      });
-
-      if (error) throw error;
-
-      if (data?.success) {
-        setEvolutionTestResult({ ok: true, message: 'Conexão com a Evolution API estabelecida!' });
-        toast.success('Evolution API conectada! ✅');
-      } else if (data?.status === 401 || data?.status === 403) {
-        setEvolutionTestResult({ ok: false, message: 'API Key inválida ou sem permissão.' });
-        toast.error('API Key inválida');
-      } else if (data?.details) {
-        // Got a response from the server (even if instance not found) = API is reachable
-        setEvolutionTestResult({ ok: true, message: 'Servidor Evolution API acessível e respondendo!' });
-        toast.success('Evolution API acessível! ✅');
-      } else {
-        setEvolutionTestResult({ ok: false, message: data?.error || 'Não foi possível conectar à Evolution API.' });
-        toast.error('Falha na conexão');
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
-      setEvolutionTestResult({ ok: false, message: msg });
-      toast.error('Erro ao testar conexão');
-    } finally {
-      setEvolutionTesting(false);
-    }
   };
 
   const handleGenerateAudio = async () => {
@@ -403,7 +339,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
 
       if (!connectedInstance) {
         toast.error('Configure o WhatsApp antes de testar', {
-          description: 'Preencha Access Token e Phone Number ID (Meta) ou conecte uma instância Evolution.',
+          description: 'Preencha Access Token e Phone Number ID (Meta) na seção WhatsApp Cloud API acima.',
         });
         return;
       }
@@ -558,96 +494,116 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
 
   return (
     <div className="space-y-6">
-      {/* Evolution API — Configuração Global */}
-      <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+      {/* Meta WhatsApp Cloud API — padrão NAVI */}
+      <div className="rounded-xl border border-emerald-500/30 bg-card p-6 space-y-4">
         <div className="flex items-center gap-3">
-          <Smartphone className="w-5 h-5 text-primary" />
+          <MessageSquare className="w-5 h-5 text-emerald-600" />
           <div>
-            <h3 className="font-semibold text-foreground">Evolution API</h3>
-            <p className="text-xs text-muted-foreground">Configure as credenciais globais para criar instâncias WhatsApp</p>
+            <h3 className="font-semibold text-foreground">WhatsApp Cloud API (Meta)</h3>
+            <p className="text-xs text-muted-foreground">
+              Credenciais usadas para envio, testes e registro da conexão oficial (sem Evolution nem QR Code)
+            </p>
           </div>
           <div className={`ml-auto flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border ${
-            settings.evolution_api_url && settings.evolution_api_key
+            metaConfigured
               ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800'
               : 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800'
           }`}>
-            <span className={`h-2 w-2 rounded-full ${settings.evolution_api_url && settings.evolution_api_key ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-            {settings.evolution_api_url && settings.evolution_api_key ? 'API Key registrada' : 'API Key não configurada'}
+            <span className={`h-2 w-2 rounded-full ${metaConfigured ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+            {metaConfigured ? 'Meta configurada' : 'Pendente'}
           </div>
         </div>
 
         <div className="grid gap-3">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">URL da Evolution API</label>
-            <input
-              type="url"
-              placeholder="https://evo.seudominio.com"
-              value={settings.evolution_api_url ?? ''}
-              onChange={e => setSettings(s => ({ ...s, evolution_api_url: e.target.value || null }))}
-              onBlur={handleEvolutionApiBlur}
-              className="flex h-10 w-full rounded-md border border-input bg-secondary/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">API Key Global</label>
+            <label className="text-sm font-medium text-foreground">Access Token</label>
             <div className="relative">
               <input
-                type={showEvolutionApiKey ? 'text' : 'password'}
-                placeholder="Sua API Key do Evolution"
-                value={settings.evolution_api_key ?? ''}
-                onChange={e => setSettings(s => ({ ...s, evolution_api_key: e.target.value || null }))}
-                onBlur={handleEvolutionApiBlur}
-                className="flex h-10 w-full rounded-md border border-input bg-secondary/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 pr-10"
+                type={showWhatsAppToken ? 'text' : 'password'}
+                placeholder="EAA..."
+                value={settings.whatsapp_access_token ?? ''}
+                onChange={e => setSettings(s => ({ ...s, whatsapp_access_token: e.target.value || null }))}
+                className="flex h-10 w-full rounded-md border border-input bg-secondary/50 px-3 py-2 text-sm font-mono pr-10"
               />
               <button
                 type="button"
-                onClick={() => setShowEvolutionApiKey(!showEvolutionApiKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowWhatsAppToken(!showWhatsAppToken)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
               >
-                {showEvolutionApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showWhatsAppToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-xs text-muted-foreground">As credenciais são salvas automaticamente ao sair do campo</p>
           </div>
-
-          {/* Test Connection */}
-          <div className="flex items-center gap-3 pt-1">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleTestEvolutionConnection}
-              disabled={evolutionTesting || !settings.evolution_api_url || !settings.evolution_api_key}
-              className="gap-2"
-            >
-              {evolutionTesting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Wifi className="w-4 h-4" />
-              )}
-              {evolutionTesting ? 'Testando...' : 'Testar Conexão'}
-            </Button>
-
-            {evolutionTestResult && (
-              <div className={`flex items-center gap-2 text-sm font-medium ${evolutionTestResult.ok ? 'text-emerald-600' : 'text-destructive'}`}>
-                {evolutionTestResult.ok
-                  ? <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  : <XCircle className="w-4 h-4 shrink-0" />
-                }
-                <span>{evolutionTestResult.message}</span>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Phone Number ID</label>
+            <input
+              type="text"
+              placeholder="910223578841229"
+              value={settings.whatsapp_phone_number_id ?? ''}
+              onChange={e => setSettings(s => ({ ...s, whatsapp_phone_number_id: e.target.value || null }))}
+              className="flex h-10 w-full rounded-md border border-input bg-secondary/50 px-3 py-2 text-sm font-mono"
+            />
+            <p className="text-xs text-muted-foreground">ID do número em Meta → WhatsApp → API Setup (só dígitos)</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">WABA ID (opcional)</label>
+            <input
+              type="text"
+              placeholder="1749567302601773"
+              value={settings.whatsapp_business_account_id ?? ''}
+              onChange={e => setSettings(s => ({ ...s, whatsapp_business_account_id: e.target.value || null }))}
+              className="flex h-10 w-full rounded-md border border-input bg-secondary/50 px-3 py-2 text-sm font-mono"
+            />
+          </div>
+          <Collapsible.Root open={webhookOpen} onOpenChange={setWebhookOpen}>
+            <Collapsible.Trigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full">
+              <span>Webhook (recebimento)</span>
+              <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${webhookOpen ? 'rotate-180' : ''}`} />
+            </Collapsible.Trigger>
+            <Collapsible.Content className="mt-3 space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Webhook URL</label>
+                <div className="flex gap-2">
+                  <input readOnly value={webhookUrl} className="flex h-9 flex-1 rounded-md border border-input bg-muted/50 px-3 text-xs font-mono" />
+                  <Button type="button" variant="outline" size="sm" onClick={() => {
+                    navigator.clipboard.writeText(webhookUrl);
+                    setCopiedWebhook(true);
+                    setTimeout(() => setCopiedWebhook(false), 2000);
+                  }}>
+                    {copiedWebhook ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
               </div>
-            )}
-          </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Verify Token</label>
+                <input
+                  readOnly
+                  value={settings.whatsapp_verify_token ?? ''}
+                  className="flex h-9 w-full rounded-md border border-input bg-muted/50 px-3 text-xs font-mono"
+                />
+              </div>
+            </Collapsible.Content>
+          </Collapsible.Root>
         </div>
       </div>
 
-      {/* Evolution API Instances */}
+      {/* Instâncias — Meta ou Evolution */}
       <div className="rounded-xl border border-border bg-card p-6">
         <WhatsAppInstancesManager
+          metaConfigured={metaConfigured}
+          whatsappAccessToken={settings.whatsapp_access_token}
+          whatsappPhoneNumberId={settings.whatsapp_phone_number_id}
           evolutionApiUrl={settings.evolution_api_url}
           evolutionApiKey={settings.evolution_api_key}
         />
       </div>
 
+      <p className="text-xs text-muted-foreground px-1">
+        Evolution API está <strong>deprecada</strong> — não configure novas conexões. Migração:{' '}
+        <a href="https://github.com/Marcelo-Rosas/navi/blob/main/REQUIREMENTS.md#4-whatsapp--evolution-api-deprecado" className="text-primary hover:underline" target="_blank" rel="noreferrer">
+          REQUIREMENTS.md §4
+        </a>
+      </p>
 
       {/* ElevenLabs */}
       <div className="rounded-xl border border-border bg-card p-6">

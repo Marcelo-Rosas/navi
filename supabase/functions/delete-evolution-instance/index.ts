@@ -26,12 +26,15 @@ serve(async (req) => {
 
     const { data: instance } = await supabase
       .from("whatsapp_instances")
-      .select("instance_name")
+      .select("instance_name, provider_type")
       .eq("id", instance_id)
       .single();
 
     let evolution_error: string | null = null;
-    if (instance?.instance_name) {
+    if (
+      instance?.instance_name &&
+      instance.provider_type !== "official"
+    ) {
       const evoRes = await fetch(
         `${EVOLUTION_URL}/instance/delete/${instance.instance_name}`,
         {

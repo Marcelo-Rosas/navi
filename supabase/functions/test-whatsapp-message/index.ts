@@ -6,6 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+const META_GRAPH = 'https://graph.facebook.com/v21.0';
+
 function jsonResponse(body: Record<string, unknown>, status: number) {
   return new Response(JSON.stringify(body), {
     status,
@@ -13,13 +15,186 @@ function jsonResponse(body: Record<string, unknown>, status: number) {
   });
 }
 
+/** E.164 sem + (ex: 55479933851351) */
 function normalizePhone(raw: string): string {
   let digits = raw.replace(/\D/g, '');
   if (!digits) return '';
-  if (!digits.startsWith('55')) {
-    digits = `55${digits}`;
+
+  if (digits.startsWith('55')) {
+    digits = digits.slice(2);
   }
-  return digits;
+
+  // BR móvel: DDD(2) + 8 dígitos → inserir 9 após DDD
+  if (digits.length === 10) {
+    const ddd = digits.slice(0, 2);
+    const rest = digits.slice(2);
+    if (parseInt(rest[0], 10) >= 6) {
+      digits = `${ddd}9${rest}`;
+    }
+  }
+
+  return `55${digits}`;
+}
+
+function formatMetaError(data: Record<string, unknown>): string {
+  const err = data?.error as Record<string, unknown> | undefined;
+  if (!err) return JSON.stringify(data);
+
+  const parts: string[] = [];
+  if (err.message) parts.push(String(err.message));
+  if (err.error_user_msg) parts.push(String(err.error_user_msg));
+  if (err.error_subcode) parts.push(`subcode ${err.error_subcode}`);
+
+  const code = err.code;
+  if (code === 131030 || String(err.message || '').includes('allowed list')) {
+    parts.push('Adicione o número em Meta for Developers → WhatsApp → API Setup → To.');
+  }
+  if (code === 131047 || String(err.message || '').toLowerCase().includes('template')) {
+    parts.push('Fora da janela de 24h: use template aprovado ou peça para o contato enviar uma mensagem primeiro.');
+  }
+  if (code === 100) {
+    parts.push('Verifique se Phone Number ID está correto (não use WABA ID nem App ID).');
+  }
+
+  return parts.join(' — ') || 'Erro desconhecido da Meta';
+}
+
+async function metaPost(
+  phoneNumberId: string,
+  accessToken: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; data: Record<string, unknown>; status: number }> {
+  const response = await fetch(`${META_GRAPH}/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  let data: Record<string, unknown> = {};
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  return { ok: response.ok, data, status: response.status };
+}
+
+async function sendViaMetaText(
+  phoneNumberId: string,
+  accessToken: string,
+  phone: string,
+  message: string,
+): Promise<{ messageId: string }> {
+  const { ok, data } = await metaPost(phoneNumberId, accessToken, {
+    messaging_product: 'whatsapp',
+    to: phone,
+    type: 'text',
+    text: { body: message },
+  });
+
+  if (!ok) {
+    throw new Error(`Meta API: ${formatMetaError(data)}`);
+  }
+
+  const messages = data.messages as { id?: string }[] | undefined;
+  const messageId = messages?.[0]?.id;
+  if (!messageId) throw new Error('Meta API não retornou ID da mensagem');
+  return { messageId };
+}
+
+async function verifyMetaPhoneNumberId(
+  phoneNumberId: string,
+  accessToken: string,
+): Promise<string | null> {
+  const res = await fetch(
+    `${META_GRAPH}/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  const data = await res.json();
+  if (!res.ok) {
+    return `Phone Number ID inválido ou token sem permissão: ${formatMetaError(data)}`;
+  }
+  const row = data as { display_phone_number?: string; verified_name?: string };
+  console.log(
+    '[test-whatsapp-message] Número Meta:',
+    row.verified_name,
+    row.display_phone_number,
+  );
+  return null;
+}
+
+async function listApprovedTemplates(
+  wabaId: string,
+  accessToken: string,
+): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `${META_GRAPH}/${wabaId}/message_templates?fields=name,status,language&limit=50`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    const data = await res.json();
+    if (!res.ok) return [];
+    const list = data.data as { name?: string; status?: string }[] | undefined;
+    return (list || [])
+      .filter((t) => t.status === 'APPROVED' && t.name)
+      .map((t) => t.name as string);
+  } catch {
+    return [];
+  }
+}
+
+async function sendViaMetaHelloWorld(
+  phoneNumberId: string,
+  accessToken: string,
+  phone: string,
+  wabaId?: string | null,
+): Promise<{ messageId: string; language: string; template: string }> {
+  const attemptErrors: string[] = [];
+  const languages = ['pt_BR', 'en_US', 'en'];
+  const templateCandidates = ['hello_world'];
+
+  if (wabaId) {
+    const approved = await listApprovedTemplates(wabaId, accessToken);
+    for (const name of approved) {
+      if (!templateCandidates.includes(name)) templateCandidates.push(name);
+    }
+  }
+
+  for (const templateName of templateCandidates) {
+    for (const language of languages) {
+      const { ok, data } = await metaPost(phoneNumberId, accessToken, {
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: language },
+        },
+      });
+
+      if (ok) {
+        const messages = data.messages as { id?: string }[] | undefined;
+        const messageId = messages?.[0]?.id;
+        if (messageId) return { messageId, language, template: templateName };
+      }
+      const err = `${templateName}/${language}: ${formatMetaError(data)}`;
+      attemptErrors.push(err);
+      console.warn(`[test-whatsapp-message] template failed:`, err);
+    }
+  }
+
+  const templatesHint = wabaId
+    ? ` Templates aprovados na conta: ${templateCandidates.slice(0, 8).join(', ') || 'nenhum listado'}.`
+    : '';
+
+  throw new Error(
+    `Meta API: falha no envio (texto e templates). Detalhes: ${attemptErrors.slice(0, 3).join(' | ')}.${templatesHint} ` +
+      'Adicione o número em Meta for Developers → WhatsApp → API Setup → To (modo dev) ou peça o contato enviar uma mensagem primeiro (janela 24h).',
+  );
 }
 
 async function sendViaMeta(
@@ -27,37 +202,44 @@ async function sendViaMeta(
   accessToken: string,
   phone: string,
   message: string,
-): Promise<{ messageId: string }> {
-  const response = await fetch(
-    `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: phone,
-        type: 'text',
-        text: { body: message },
-      }),
-    },
-  );
-
-  const data = await response.json();
-  if (!response.ok) {
-    const metaMsg = data?.error?.message || JSON.stringify(data);
-    const hint = metaMsg.includes('not in allowed list') || metaMsg.includes('131030')
-      ? ' Adicione o número na lista de testes do app no Meta for Developers.'
-      : '';
-    throw new Error(`Meta API: ${metaMsg}${hint}`);
+  wabaId?: string | null,
+): Promise<{ messageId: string; mode: 'text' | 'template' }> {
+  if (!/^\d{10,20}$/.test(phoneNumberId)) {
+    throw new Error(
+      'Phone Number ID inválido (use o ID do número em Meta → WhatsApp → API Setup, só dígitos).',
+    );
   }
 
-  const messageId = data?.messages?.[0]?.id;
-  if (!messageId) throw new Error('Meta API não retornou ID da mensagem');
-  return { messageId };
+  const phoneIdError = await verifyMetaPhoneNumberId(phoneNumberId, accessToken);
+  if (phoneIdError) throw new Error(`Meta API: ${phoneIdError}`);
+
+  try {
+    const { messageId } = await sendViaMetaText(phoneNumberId, accessToken, phone, message);
+    return { messageId, mode: 'text' };
+  } catch (textErr) {
+    const textMsg = textErr instanceof Error ? textErr.message : '';
+    console.warn('[test-whatsapp-message] Texto livre falhou, tentando hello_world:', textMsg);
+
+    const shouldTryTemplate =
+      textMsg.includes('(#100)') ||
+      textMsg.includes('131047') ||
+      textMsg.includes('131026') ||
+      textMsg.includes('template') ||
+      textMsg.includes('24') ||
+      textMsg.includes('session') ||
+      textMsg.includes('re-engagement');
+
+    if (!shouldTryTemplate) throw textErr;
+
+    const { messageId, language, template } = await sendViaMetaHelloWorld(
+      phoneNumberId,
+      accessToken,
+      phone,
+      wabaId,
+    );
+    console.log(`[test-whatsapp-message] template ${template} enviado (${language})`);
+    return { messageId, mode: 'template' };
+  }
 }
 
 async function sendViaEvolution(
@@ -66,7 +248,7 @@ async function sendViaEvolution(
   supabaseServiceKey: string,
   cleanPhone: string,
   message: string,
-  userId: string,
+  userId: string | null,
 ): Promise<{ messageId: string; contactId: string; conversationId: string }> {
   const { data: instance } = await supabase
     .from('whatsapp_instances')
@@ -194,7 +376,7 @@ serve(async (req) => {
       return jsonResponse(
         {
           success: false,
-          error: 'Número inválido. Use DDD + número com 9 dígitos (ex: 5511999999999 ou +5511999999999)',
+          error: `Número inválido (${cleanPhone}). Use DDD + celular com 9 dígitos (ex: 55479933851351).`,
         },
         400,
       );
@@ -204,21 +386,36 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    let userId: string | null = null;
     const authHeader = req.headers.get('authorization');
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: { user } } = await supabase.auth.getUser(token);
-      userId = user?.id || null;
-    }
+    const bearer = authHeader?.replace(/^Bearer\s+/i, '').trim() ?? '';
 
-    if (!userId) {
-      return jsonResponse({ success: false, error: 'Usuário não autenticado' }, 401);
+    let userId: string | null = null;
+
+    if (bearer && bearer === supabaseServiceKey) {
+      // Scripts / Node com service_role (sem sessão de usuário)
+      console.log('[test-whatsapp-message] Auth: service_role');
+      userId = null;
+    } else if (bearer) {
+      const { data: { user }, error: authError } = await supabase.auth.getUser(bearer);
+      if (authError || !user) {
+        return jsonResponse({
+          success: false,
+          error:
+            'Token inválido ou expirado. Na UI use sessão logada; em scripts use Authorization: Bearer <SERVICE_ROLE_KEY>.',
+        }, 401);
+      }
+      userId = user.id;
+      console.log('[test-whatsapp-message] Auth: user', userId);
+    } else {
+      return jsonResponse({
+        success: false,
+        error: 'Header Authorization obrigatório (JWT do usuário ou service_role)',
+      }, 401);
     }
 
     const { data: ninaSettings } = await supabase
       .from('nina_settings')
-      .select('whatsapp_access_token, whatsapp_phone_number_id')
+      .select('whatsapp_access_token, whatsapp_phone_number_id, whatsapp_business_account_id')
       .limit(1)
       .maybeSingle();
 
@@ -233,35 +430,43 @@ serve(async (req) => {
       ''
     ).trim();
 
+    const wabaId = (body.whatsapp_business_account_id || ninaSettings?.whatsapp_business_account_id || '')
+      .trim() || null;
+
     if (accessToken && phoneNumberId) {
-      console.log('[test-whatsapp-message] Meta Cloud API →', cleanPhone);
-      const { messageId } = await sendViaMeta(phoneNumberId, accessToken, cleanPhone, text);
-      return jsonResponse({ success: true, message_id: messageId, provider: 'meta' }, 200);
+      console.log('[test-whatsapp-message] Meta →', cleanPhone);
+      const { messageId, mode } = await sendViaMeta(
+        phoneNumberId,
+        accessToken,
+        cleanPhone,
+        text,
+        wabaId,
+      );
+      return jsonResponse({
+        success: true,
+        message_id: messageId,
+        provider: 'meta',
+        mode,
+        hint: mode === 'template'
+          ? 'Enviado via template hello_world (texto livre só funciona se o contato falou com você nas últimas 24h).'
+          : undefined,
+      }, 200);
     }
 
-    console.log('[test-whatsapp-message] Evolution fallback');
-    const result = await sendViaEvolution(
-      supabase,
-      supabaseUrl,
-      supabaseServiceKey,
-      cleanPhone,
-      text,
-      userId,
-    );
     return jsonResponse({
-      success: true,
-      message_id: result.messageId,
-      contact_id: result.contactId,
-      conversation_id: result.conversationId,
-      provider: 'evolution',
-    }, 200);
+      success: false,
+      error:
+        'WhatsApp Meta não configurado. Preencha Access Token e Phone Number ID em Configurações. Evolution API está deprecada (ver REQUIREMENTS.md).',
+    }, 400);
   } catch (error) {
     console.error('[test-whatsapp-message] Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Erro inesperado';
     const isClientError =
       errorMessage.includes('Meta API') ||
       errorMessage.includes('Nenhuma instância') ||
-      errorMessage.includes('obrigatório');
+      errorMessage.includes('Phone Number ID') ||
+      errorMessage.includes('obrigatório') ||
+      errorMessage.includes('inválido');
     return jsonResponse(
       { success: false, error: errorMessage },
       isClientError ? 400 : 500,

@@ -35,8 +35,8 @@ import { toast } from 'sonner';
 
 const providerLabels: Record<ProviderType, string> = {
   official: 'API Oficial (Meta)',
-  evolution_self_hosted: 'Evolution Self-Hosted',
-  evolution_cloud: 'Evolution Cloud',
+  evolution_self_hosted: 'Evolution (deprecado)',
+  evolution_cloud: 'Evolution Cloud (deprecado)',
 };
 
 const providerIcons: Record<ProviderType, React.ReactNode> = {
@@ -55,11 +55,20 @@ interface InstanceSettings {
 }
 
 interface WhatsAppInstancesManagerProps {
+  metaConfigured?: boolean;
+  whatsappAccessToken?: string | null;
+  whatsappPhoneNumberId?: string | null;
   evolutionApiUrl?: string | null;
   evolutionApiKey?: string | null;
 }
 
-export function WhatsAppInstancesManager({ evolutionApiUrl, evolutionApiKey }: WhatsAppInstancesManagerProps = {}) {
+export function WhatsAppInstancesManager({
+  metaConfigured = false,
+  whatsappAccessToken,
+  whatsappPhoneNumberId,
+  evolutionApiUrl,
+  evolutionApiKey,
+}: WhatsAppInstancesManagerProps = {}) {
   const { instances, isLoading, refetch, deleteInstance, setDefaultInstance } = useWhatsAppInstances();
   const queryClient = useQueryClient();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -305,7 +314,7 @@ export function WhatsAppInstancesManager({ evolutionApiUrl, evolutionApiKey }: W
         <div>
           <h3 className="text-lg font-semibold text-foreground">Instâncias WhatsApp</h3>
           <p className="text-sm text-muted-foreground">
-            Gerencie suas conexões com WhatsApp via Evolution API ou API Oficial
+            Registre a conexão Meta Cloud API. Instâncias Evolution antigas permanecem listadas até migração.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -556,8 +565,9 @@ export function WhatsAppInstancesManager({ evolutionApiUrl, evolutionApiKey }: W
       <AddInstanceDialog
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
-        evolutionApiUrl={evolutionApiUrl}
-        evolutionApiKey={evolutionApiKey}
+        metaConfigured={metaConfigured}
+        whatsappAccessToken={whatsappAccessToken}
+        whatsappPhoneNumberId={whatsappPhoneNumberId}
       />
 
       {/* Dialog de Confirmar Exclusão */}

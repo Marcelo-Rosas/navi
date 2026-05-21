@@ -39,15 +39,15 @@ export function useOnboardingStatus(): OnboardingStatus {
     },
     {
       id: 'whatsapp',
-      title: 'Evolution API',
-      description: 'Configure a conexão com a Evolution API',
+      title: 'WhatsApp Cloud API',
+      description: 'Access Token, Phone Number ID e WABA (Meta)',
       isComplete: false,
       isRequired: true,
     },
     {
       id: 'whatsapp_connect',
-      title: 'Conectar WhatsApp',
-      description: 'Crie uma instância e conecte via QR Code',
+      title: 'Registrar conexão',
+      description: 'Registrar número oficial na NAVI (sem QR Code)',
       isComplete: false,
       isRequired: true,
     },
@@ -142,7 +142,10 @@ export function useOnboardingStatus(): OnboardingStatus {
             case 'whatsapp':
               return {
                 ...step,
-                isComplete: !!((settings as any).evolution_api_url && (settings as any).evolution_api_key),
+                isComplete: !!(
+                  settings.whatsapp_access_token?.trim() &&
+                  settings.whatsapp_phone_number_id?.trim()
+                ),
               };
             case 'whatsapp_connect':
               return {
@@ -175,7 +178,12 @@ export function useOnboardingStatus(): OnboardingStatus {
             case 'verification':
               return {
                 ...step,
-                isComplete: !!(settings.company_name && settings.sdr_name && (settings as any).evolution_api_url && settings.system_prompt_override),
+                isComplete: !!(
+                  settings.company_name &&
+                  settings.sdr_name &&
+                  settings.whatsapp_access_token?.trim() &&
+                  settings.system_prompt_override
+                ),
               };
             case 'finish':
               return {
@@ -230,6 +238,7 @@ export function useOnboardingStatus(): OnboardingStatus {
    * Passos que realmente bloqueiam o uso do sistema (não inclui "Conectar WhatsApp",
    * pois o status na tabela whatsapp_instances pode divergir da realidade).
    */
+  /** Meta WhatsApp + identidade + agente (Evolution não entra no core). */
   const CORE_REQUIRED_IDS = ['identity', 'whatsapp', 'agent'] as const;
   const coreComplete = CORE_REQUIRED_IDS.every((id) => {
     const step = steps.find((s) => s.id === id);
@@ -237,7 +246,7 @@ export function useOnboardingStatus(): OnboardingStatus {
   });
   /**
    * Oculta o banner se: wizard concluído (localStorage ou coluna no banco), OU
-   * identidade + Evolution + agente OK, OU tudo obrigatório (incl. WhatsApp conectado no DB).
+   * identidade + Meta WhatsApp + agente OK, OU tudo obrigatório (incl. instância registrada no DB).
    */
   const isComplete =
     hasSeenWizard || coreComplete || requiredComplete;

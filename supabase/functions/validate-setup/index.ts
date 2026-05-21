@@ -103,8 +103,34 @@ serve(async (req) => {
         });
       }
 
-      // Check WhatsApp (Evolution API)
-      if (settings.evolution_api_url && settings.evolution_api_key) {
+      // Check WhatsApp — Meta Cloud API (preferido) ou Evolution (legado)
+      const hasMeta =
+        !!(settings.whatsapp_access_token?.trim() &&
+          settings.whatsapp_phone_number_id?.trim());
+
+      if (hasMeta) {
+        const { data: connectedInstances } = await supabase
+          .from('whatsapp_instances')
+          .select('id, status, name, provider_type')
+          .eq('is_active', true)
+          .eq('status', 'connected')
+          .limit(1);
+
+        if (connectedInstances && connectedInstances.length > 0) {
+          results.push({
+            component: 'whatsapp',
+            status: 'ok',
+            message: `Meta Cloud API: ${connectedInstances[0].name || 'conexão ativa'}`,
+          });
+        } else {
+          results.push({
+            component: 'whatsapp',
+            status: 'warning',
+            message: 'Meta configurada — registre a conexão em Configurações → Nova Instância',
+            details: 'Use o botão Registrar Meta (sem QR Code)',
+          });
+        }
+      } else if (settings.evolution_api_url && settings.evolution_api_key) {
         // Test Evolution API connection
         try {
           const baseUrl = settings.evolution_api_url.replace(/\/$/, '');
@@ -158,8 +184,8 @@ serve(async (req) => {
         results.push({
           component: 'whatsapp',
           status: 'error',
-          message: 'Evolution API n├úo configurada',
-          details: 'Configure a URL e API Key da Evolution',
+          message: 'WhatsApp não configurado',
+          details: 'Configure Access Token e Phone Number ID (Meta Cloud API)',
         });
       }
 

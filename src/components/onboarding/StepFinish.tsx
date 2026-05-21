@@ -159,7 +159,13 @@ export const StepFinish: React.FC<StepFinishProps> = ({
       if (data && data.success === false) {
         throw new Error(data.error || 'Erro ao enviar mensagem de teste');
       }
-      toast.success('Mensagem de teste enviada!');
+      if (data?.mode === 'template') {
+        toast.success('Teste enviado via template hello_world', {
+          description: data.hint || 'Texto personalizado exige que o contato tenha falado com você nas últimas 24h.',
+        });
+      } else {
+        toast.success('Mensagem de teste enviada!');
+      }
     } catch (error: unknown) {
       console.error('Error sending test:', error);
       const msg = error instanceof Error ? error.message : 'Erro ao enviar mensagem de teste';
