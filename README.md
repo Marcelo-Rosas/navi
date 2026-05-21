@@ -15,6 +15,8 @@ View your app in AI Studio: https://ai.studio/apps/drive/1Bemm5SfsFUjw9u5_Ti1uOy
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+2. Copy [`.env.example`](.env.example) to `.env.local` and set your Supabase **anon** key from [Project Settings → API](https://supabase.com/dashboard/project/ijkeuncfyaonjermwggl/settings/api) (project `ijkeuncfyaonjermwggl`, not the old `ohbocxuvzrgzqkjocyns` from the initial remix).
+3. Optionally set `GEMINI_API_KEY` in `.env.local` for AI Studio features.
+4. Run the app: `npm run dev`
+
+**Deploy (Cloudflare / Vite):** set the same `VITE_SUPABASE_*` variables in the hosting dashboard. Do not rely on the `.env` file committed on GitHub `main` — it still points at the wrong Supabase project until removed from the repo.
